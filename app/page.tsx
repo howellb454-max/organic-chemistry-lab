@@ -1,69 +1,90 @@
-import Image from "next/image";
+import { Search, FlaskConical, Puzzle, GraduationCap, Library } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Header } from "./components/header";
+
+const features = [
+  {
+    icon: Search,
+    title: "Buscar Compuestos",
+    description: "Encuentra moléculas por nombre, fórmula o estructura usando la base de datos de PubChem.",
+  },
+  {
+    icon: Puzzle,
+    title: "Constructor de Moléculas",
+    description: "Dibuja y ensambla estructuras químicas orgánicas con una interfaz visual interactiva.",
+  },
+  {
+    icon: GraduationCap,
+    title: "Modo Educativo",
+    description: "Aprende sobre reacciones, mecanismos y propiedades con contenido paso a paso.",
+  },
+  {
+    icon: Library,
+    title: "Biblioteca de Compuestos",
+    description: "Guarda, organiza y accede a tu colección personal de moléculas favoritas.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="flex min-h-screen flex-col">
+      <Header />
+
+      <main className="flex-1">
+        <section className="mx-auto flex max-w-5xl flex-col items-center px-4 pt-20 pb-16 text-center sm:px-6 sm:pt-28 sm:pb-20">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <FlaskConical className="size-3" />
+            Laboratorio Virtual
+          </div>
+
+          <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+            Explora la Química Orgánica
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="mb-8 max-w-2xl text-lg text-muted-foreground sm:text-xl">
+            Busca, visualiza y construye moléculas orgánicas. Herramientas interactivas
+            para estudiantes y profesionales de la química.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+          <form className="flex w-full max-w-md gap-2" action="/search" method="GET">
+            <Input
+              name="q"
+              placeholder="Busca una molécula... (ej. cafeína, aspirina)"
+              className="h-11 flex-1 text-base"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+            <Button type="submit" size="lg" className="h-11 px-6">
+              <Search className="mr-1 size-4" />
+              Buscar
+            </Button>
+          </form>
+        </section>
+
+        <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {features.map((feature) => (
+              <Card key={feature.title} className="transition-colors hover:bg-accent/50">
+                <CardHeader>
+                  <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-emerald-500/10">
+                    <feature.icon className="size-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <CardTitle>{feature.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="text-sm leading-relaxed">
+                    {feature.description}
+                  </CardDescription>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
       </main>
+
+      <footer className="border-t py-6 text-center text-sm text-muted-foreground">
+        Organic Chemistry Lab &mdash; Laboratorio Virtual de Química Orgánica
+      </footer>
     </div>
   );
 }
