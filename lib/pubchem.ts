@@ -10,7 +10,13 @@ export interface CompoundResult {
   source?: "opsin";
 }
 
+export interface CompoundDetail extends CompoundResult {
+  inchikey: string | null;
+  synonyms: string[];
+}
+
 const cache = new Map<string, { data: CompoundResult; expiry: number }>();
+const detailCache = new Map<number, { data: CompoundDetail; expiry: number }>();
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
 export async function searchCompound(query: string): Promise<CompoundResult> {
@@ -58,6 +64,48 @@ export async function searchCompound(query: string): Promise<CompoundResult> {
 
 export function getCompoundImageUrl(cid: number): string {
   return `${PUBCHEM_BASE}/compound/cid/${cid}/PNG?image_size=500x500`;
+}
+
+export async function getCompoundByCid(cid: number): Promise<CompoundDetail | null> {
+  const cached = detailCache.get(cid);
+  if (cached && cached.expiry > Date.now()) return cached.data;
+
+  const propsUrl = `${PUBCHEM_BASE}/compound/cid/${cid}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName,InChI,InChIKey/JSON`;
+  const synUrl = `${PUBCHEM_BASE}/compound/cid/${cid}/synonyms/JSON`;
+
+  const [propsRes, synRes] = await Promise.all([
+    fetch(propsUrl, { next: { revalidate: 3600 } }),
+    fetch(synUrl, { next: { revalidate: 3600 } }),
+  ]);
+
+  if (!propsRes.ok) return null;
+
+  const propsJson = await propsRes.json();
+  const table = propsJson?.PropertyTable?.Properties?.[0];
+  if (!table) return null;
+
+  let synonyms: string[] = [];
+  if (synRes.ok) {
+    const synJson = await synRes.json();
+    const all = synJson?.InformationList?.Information?.[0]?.Synonym ?? [];
+    synonyms = all
+      .filter((s: string) => s.length <= 50 && !s.startsWith("CID ") && !/^\d+$/.test(s))
+      .slice(0, 5);
+  }
+
+  const result: CompoundDetail = {
+    cid,
+    name: table.IUPACName || "",
+    molecularFormula: table.MolecularFormula,
+    molecularWeight: String(table.MolecularWeight),
+    canonicalSMILES: table.CanonicalSMILES || table.ConnectivitySMILES,
+    inchi: table.InChI || null,
+    inchikey: table.InChIKey || null,
+    synonyms,
+  };
+
+  detailCache.set(cid, { data: result, expiry: Date.now() + CACHE_TTL });
+  return result;
 }
 
 export async function searchCompoundBySmiles(
