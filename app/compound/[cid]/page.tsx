@@ -63,6 +63,7 @@ export default async function CompoundPage({ params }: Props) {
           <div className="mt-6 flex flex-col items-start gap-8 lg:flex-row">
             <div className="flex w-full flex-col items-center gap-4 lg:w-72">
               <CompoundStructure
+                smiles={compound.canonicalSMILES}
                 imageUrl={imageUrl}
                 name={compound.name || String(cid)}
               />

@@ -27,11 +27,15 @@ export function KetcherEditor({
     (ketcher: Ketcher) => {
       ketcherRef.current = ketcher;
 
+      if (readOnly) {
+        ketcher.editor.options({ viewOnlyMode: true });
+      }
+
       if (initialSmiles) {
         ketcher.setMolecule(initialSmiles);
       }
     },
-    [initialSmiles]
+    [initialSmiles, readOnly]
   );
 
   useEffect(() => {
