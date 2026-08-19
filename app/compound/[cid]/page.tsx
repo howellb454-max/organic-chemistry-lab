@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Atom, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil } from "lucide-react";
+import { ArrowLeft, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil, Globe } from "lucide-react";
 import { Header } from "../../components/header";
 import { getCompoundByCid, getCompoundImageUrl } from "@/lib/pubchem";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { CompoundStructure } from "./compound-structure";
+import { translateIupacToEs } from "@/lib/iupac-translate";
+import { getCommonNameEs } from "@/lib/common-names-es";
 
 interface Props {
   params: Promise<{ cid: string }>;
@@ -71,14 +73,42 @@ export default async function CompoundPage({ params }: Props) {
 
             <div className="flex-1 space-y-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                  {compound.name || `Compuesto CID ${cid}`}
-                </h1>
-                {compound.molecularFormula && (
-                  <p className="mt-1 font-mono text-lg text-muted-foreground">
-                    {compound.molecularFormula}
-                  </p>
-                )}
+                {(() => {
+                  const commonEs = getCommonNameEs(compound.name, compound.synonyms);
+                  const iupacEs = compound.name
+                    ? translateIupacToEs(compound.name)
+                    : null;
+                  const showIupacEs =
+                    iupacEs && iupacEs.toLowerCase() !== (compound.name || "").toLowerCase();
+                  const showEnglish =
+                    commonEs &&
+                    compound.name &&
+                    commonEs.toLowerCase() !== compound.name.toLowerCase();
+
+                  return (
+                    <>
+                      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                        {commonEs || compound.name || `Compuesto CID ${cid}`}
+                      </h1>
+                      {showIupacEs && (
+                        <p className="mt-1 text-base text-muted-foreground">
+                          <Globe className="mr-1 inline size-3.5" />
+                          {iupacEs}
+                        </p>
+                      )}
+                      {showEnglish && (
+                        <p className="mt-0.5 text-sm text-muted-foreground/70">
+                          ({compound.name})
+                        </p>
+                      )}
+                      {compound.molecularFormula && (
+                        <p className="mt-1 font-mono text-lg text-muted-foreground">
+                          {compound.molecularFormula}
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               <dl className="grid gap-3 sm:grid-cols-2">
