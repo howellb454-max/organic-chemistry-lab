@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
+import type { KetcherApi } from "./ketcher-editor";
 
 const KetcherEditorRaw = dynamic(
   () => import("./ketcher-editor").then((mod) => ({ default: mod.KetcherEditor })),
@@ -22,6 +23,7 @@ interface KetcherWrapperProps {
   initialSmiles?: string;
   readOnly?: boolean;
   onSmilesChange?: (smiles: string) => void;
+  onReady?: (api: KetcherApi) => void;
   className?: string;
 }
 

@@ -8,10 +8,15 @@ import "ketcher-react/dist/index.css";
 
 const structServiceProvider = new StandaloneStructServiceProvider();
 
+export interface KetcherApi {
+  getSmiles: () => Promise<string>;
+}
+
 interface KetcherEditorProps {
   initialSmiles?: string;
   readOnly?: boolean;
   onSmilesChange?: (smiles: string) => void;
+  onReady?: (api: KetcherApi) => void;
   className?: string;
 }
 
@@ -19,6 +24,7 @@ export function KetcherEditor({
   initialSmiles,
   readOnly = false,
   onSmilesChange,
+  onReady,
   className,
 }: KetcherEditorProps) {
   const ketcherRef = useRef<Ketcher | null>(null);
@@ -38,8 +44,12 @@ export function KetcherEditor({
       if (readOnly) {
         ketcher.editor.options({ viewOnlyMode: true });
       }
+
+      onReady?.({
+        getSmiles: () => ketcher.getSmiles(),
+      });
     },
-    [initialSmiles, readOnly]
+    [initialSmiles, readOnly, onReady]
   );
 
   useEffect(() => {
