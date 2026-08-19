@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Header } from "../components/header";
 import { KetcherWrapper } from "@/components/molecule/ketcher-wrapper";
+import { ErrorBoundary } from "@/components/error-boundary";
 import type { KetcherApi } from "@/components/molecule/ketcher-editor";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,13 +106,15 @@ function BuilderContent() {
             </Button>
           </div>
 
-          <div className="overflow-hidden rounded-xl border">
-            <KetcherWrapper
-              initialSmiles={smiles}
-              onReady={setKetcherApi}
-              className="h-[600px]"
-            />
-          </div>
+          <ErrorBoundary fallbackTitle="Error en el editor molecular">
+            <div className="overflow-hidden rounded-xl border">
+              <KetcherWrapper
+                initialSmiles={smiles}
+                onReady={setKetcherApi}
+                className="h-[600px]"
+              />
+            </div>
+          </ErrorBoundary>
 
           {error && (
             <Card className="mt-6">
