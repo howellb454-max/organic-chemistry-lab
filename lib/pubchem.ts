@@ -1,11 +1,13 @@
 const PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug";
 
 export interface CompoundResult {
-  cid: number;
+  cid: number | null;
   name: string;
-  molecularFormula: string;
-  molecularWeight: string;
+  molecularFormula: string | null;
+  molecularWeight: string | null;
   canonicalSMILES: string;
+  inchi?: string;
+  source?: "opsin";
 }
 
 const cache = new Map<string, { data: CompoundResult; expiry: number }>();
@@ -56,6 +58,37 @@ export async function searchCompound(query: string): Promise<CompoundResult> {
 
 export function getCompoundImageUrl(cid: number): string {
   return `${PUBCHEM_BASE}/compound/cid/${cid}/PNG?image_size=500x500`;
+}
+
+export async function searchCompoundBySmiles(
+  smiles: string
+): Promise<CompoundResult | null> {
+  const encoded = encodeURIComponent(smiles);
+  const propsUrl = `${PUBCHEM_BASE}/compound/smiles/${encoded}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName/JSON`;
+  const cidsUrl = `${PUBCHEM_BASE}/compound/smiles/${encoded}/cids/JSON`;
+
+  const [propsRes, cidsRes] = await Promise.all([
+    fetch(propsUrl, { next: { revalidate: 3600 } }),
+    fetch(cidsUrl, { next: { revalidate: 3600 } }),
+  ]);
+
+  if (!propsRes.ok || !cidsRes.ok) return null;
+
+  const propsJson = await propsRes.json();
+  const cidsJson = await cidsRes.json();
+
+  const table = propsJson?.PropertyTable?.Properties?.[0];
+  const cid = cidsJson?.IdentifierList?.CID?.[0];
+
+  if (!table || !cid) return null;
+
+  return {
+    cid,
+    name: table.IUPACName || "",
+    molecularFormula: table.MolecularFormula,
+    molecularWeight: String(table.MolecularWeight),
+    canonicalSMILES: table.CanonicalSMILES || table.ConnectivitySMILES,
+  };
 }
 
 export class CompoundNotFoundError extends Error {

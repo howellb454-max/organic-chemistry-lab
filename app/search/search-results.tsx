@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { Atom, FlaskConical, Hash, Weight, Binary } from "lucide-react";
+import { Atom, FlaskConical, Hash, Weight, Binary, AlertTriangle } from "lucide-react";
 import {
   Card,
   CardHeader,
@@ -80,14 +80,15 @@ export function SearchResults() {
   }
 
   if (result) {
-    const imageUrl = getCompoundImageUrl(result.cid);
+    const hasPubChemData = result.cid !== null;
+    const imageUrl = hasPubChemData ? getCompoundImageUrl(result.cid!) : null;
 
     const properties = [
-      { icon: Hash, label: "CID", value: String(result.cid) },
-      { icon: FlaskConical, label: "Fórmula Molecular", value: result.molecularFormula },
-      { icon: Weight, label: "Masa Molar", value: `${result.molecularWeight} g/mol` },
-      { icon: Binary, label: "SMILES", value: result.canonicalSMILES },
-    ];
+      { icon: Hash, label: "CID", value: String(result.cid), show: hasPubChemData },
+      { icon: FlaskConical, label: "Fórmula Molecular", value: result.molecularFormula ?? "", show: result.molecularFormula !== null },
+      { icon: Weight, label: "Masa Molar", value: result.molecularWeight ? `${result.molecularWeight} g/mol` : "", show: result.molecularWeight !== null },
+      { icon: Binary, label: "SMILES", value: result.canonicalSMILES, show: true },
+    ].filter((p) => p.show);
 
     return (
       <Card>
@@ -98,36 +99,47 @@ export function SearchResults() {
           <CardTitle className="text-xl">{result.name}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex flex-col items-center gap-6 sm:flex-row">
-            <div className="flex w-full flex-col items-center gap-2 sm:w-48">
-              <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border bg-white p-2">
-                {!imgError ? (
-                  <>
-                    {!imgLoaded && (
-                      <div className="flex size-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                    )}
-                    <Image
-                      src={imageUrl}
-                      alt={`Estructura 2D de ${result.name}`}
-                      width={200}
-                      height={200}
-                      className={`h-auto w-full object-contain transition-opacity ${imgLoaded ? "opacity-100" : "opacity-0 absolute"}`}
-                      onLoad={() => setImgLoaded(true)}
-                      onError={() => setImgError(true)}
-                      unoptimized
-                    />
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-1 text-center text-xs text-muted-foreground">
-                    <FlaskConical className="size-6" />
-                    <span>Estructura no disponible</span>
-                  </div>
-                )}
-              </div>
-              <span className="text-xs text-muted-foreground">Estructura 2D</span>
+          {!hasPubChemData && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="size-4 shrink-0" />
+              <span>
+                Nombre resuelto por OPSIN. PubChem no tiene este compuesto en su base de datos, por lo que no hay datos de fórmula, masa ni imagen 2D disponibles.
+              </span>
             </div>
+          )}
 
-            <dl className="grid flex-1 gap-4 sm:grid-cols-2">
+          <div className="flex flex-col items-center gap-6 sm:flex-row">
+            {imageUrl && (
+              <div className="flex w-full flex-col items-center gap-2 sm:w-48">
+                <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border bg-white p-2">
+                  {!imgError ? (
+                    <>
+                      {!imgLoaded && (
+                        <div className="flex size-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                      )}
+                      <Image
+                        src={imageUrl}
+                        alt={`Estructura 2D de ${result.name}`}
+                        width={200}
+                        height={200}
+                        className={`h-auto w-full object-contain transition-opacity ${imgLoaded ? "opacity-100" : "opacity-0 absolute"}`}
+                        onLoad={() => setImgLoaded(true)}
+                        onError={() => setImgError(true)}
+                        unoptimized
+                      />
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-center text-xs text-muted-foreground">
+                      <FlaskConical className="size-6" />
+                      <span>Estructura no disponible</span>
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">Estructura 2D</span>
+              </div>
+            )}
+
+            <dl className={`grid gap-4 ${imageUrl ? "flex-1 sm:grid-cols-2" : "w-full sm:grid-cols-2"}`}>
               {properties.map((prop) => (
                 <div key={prop.label} className="rounded-lg bg-muted/50 p-3">
                   <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
