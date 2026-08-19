@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Atom, FlaskConical, Hash, Weight, Binary, Key, Tag } from "lucide-react";
+import { ArrowLeft, Atom, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil } from "lucide-react";
 import { Header } from "../../components/header";
 import { getCompoundByCid, getCompoundImageUrl } from "@/lib/pubchem";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { CompoundStructure } from "./compound-structure";
 
 interface Props {
   params: Promise<{ cid: string }>;
@@ -23,6 +23,9 @@ export default async function CompoundPage({ params }: Props) {
   if (!compound) notFound();
 
   const imageUrl = getCompoundImageUrl(cid);
+  const builderUrl = compound.canonicalSMILES
+    ? `/builder?smiles=${encodeURIComponent(compound.canonicalSMILES)}`
+    : "/builder";
 
   const mainProps = [
     { icon: Hash, label: "CID", value: String(cid) },
@@ -39,26 +42,30 @@ export default async function CompoundPage({ params }: Props) {
 
       <main className="flex-1">
         <div className="mx-auto max-w-4xl px-4 pt-6 pb-20 sm:px-6">
-          <Link
-            href="/search"
-            className={buttonVariants({ variant: "ghost", size: "sm" })}
-          >
-            <ArrowLeft className="mr-1 size-4" />
-            Volver a búsqueda
-          </Link>
+          <div className="flex items-center justify-between">
+            <Link
+              href="/search"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              <ArrowLeft className="mr-1 size-4" />
+              Volver a búsqueda
+            </Link>
+
+            <Link
+              href={builderUrl}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Pencil className="mr-1 size-3.5" />
+              Editar en Builder
+            </Link>
+          </div>
 
           <div className="mt-6 flex flex-col items-start gap-8 lg:flex-row">
             <div className="flex w-full flex-col items-center gap-4 lg:w-72">
-              <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border bg-white p-4">
-                <Image
-                  src={imageUrl}
-                  alt={`Estructura 2D de ${compound.name || cid}`}
-                  width={300}
-                  height={300}
-                  className="h-auto w-full object-contain"
-                  unoptimized
-                />
-              </div>
+              <CompoundStructure
+                imageUrl={imageUrl}
+                name={compound.name || String(cid)}
+              />
               <span className="text-xs text-muted-foreground">Estructura 2D</span>
             </div>
 
