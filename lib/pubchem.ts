@@ -54,6 +54,10 @@ export async function searchCompound(query: string): Promise<CompoundResult> {
   return result;
 }
 
+export function getCompoundImageUrl(cid: number): string {
+  return `${PUBCHEM_BASE}/compound/cid/${cid}/PNG?image_size=500x500`;
+}
+
 export class CompoundNotFoundError extends Error {
   constructor(query: string) {
     super(`No se encontró el compuesto: "${query}"`);

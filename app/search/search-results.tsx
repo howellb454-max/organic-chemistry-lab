@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { Atom, FlaskConical, Hash, Weight, Binary } from "lucide-react";
 import {
   Card,
@@ -9,7 +10,7 @@ import {
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
-import type { CompoundResult } from "@/lib/pubchem";
+import { CompoundResult, getCompoundImageUrl } from "@/lib/pubchem";
 
 export function SearchResults() {
   const searchParams = useSearchParams();
@@ -18,6 +19,8 @@ export function SearchResults() {
   const [result, setResult] = useState<CompoundResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   useEffect(() => {
     if (!q) {
@@ -29,6 +32,8 @@ export function SearchResults() {
     setLoading(true);
     setResult(null);
     setError(null);
+    setImgError(false);
+    setImgLoaded(false);
 
     fetch(`/api/search?q=${encodeURIComponent(q)}`)
       .then(async (res) => {
@@ -75,6 +80,8 @@ export function SearchResults() {
   }
 
   if (result) {
+    const imageUrl = getCompoundImageUrl(result.cid);
+
     const properties = [
       { icon: Hash, label: "CID", value: String(result.cid) },
       { icon: FlaskConical, label: "Fórmula Molecular", value: result.molecularFormula },
@@ -90,18 +97,48 @@ export function SearchResults() {
           </div>
           <CardTitle className="text-xl">{result.name}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <dl className="grid gap-4 sm:grid-cols-2">
-            {properties.map((prop) => (
-              <div key={prop.label} className="rounded-lg bg-muted/50 p-3">
-                <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <prop.icon className="size-3" />
-                  {prop.label}
-                </dt>
-                <dd className="font-mono text-sm break-all">{prop.value}</dd>
+        <CardContent className="space-y-6">
+          <div className="flex flex-col items-center gap-6 sm:flex-row">
+            <div className="flex w-full flex-col items-center gap-2 sm:w-48">
+              <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border bg-white p-2">
+                {!imgError ? (
+                  <>
+                    {!imgLoaded && (
+                      <div className="flex size-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                    )}
+                    <Image
+                      src={imageUrl}
+                      alt={`Estructura 2D de ${result.name}`}
+                      width={200}
+                      height={200}
+                      className={`h-auto w-full object-contain transition-opacity ${imgLoaded ? "opacity-100" : "opacity-0 absolute"}`}
+                      onLoad={() => setImgLoaded(true)}
+                      onError={() => setImgError(true)}
+                      unoptimized
+                    />
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center gap-1 text-center text-xs text-muted-foreground">
+                    <FlaskConical className="size-6" />
+                    <span>Estructura no disponible</span>
+                  </div>
+                )}
               </div>
-            ))}
-          </dl>
+              <span className="text-xs text-muted-foreground">Estructura 2D</span>
+            </div>
+
+            <dl className="grid flex-1 gap-4 sm:grid-cols-2">
+              {properties.map((prop) => (
+                <div key={prop.label} className="rounded-lg bg-muted/50 p-3">
+                  <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <prop.icon className="size-3" />
+                    {prop.label}
+                  </dt>
+                  <dd className="font-mono text-sm break-all">{prop.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </CardContent>
       </Card>
     );
