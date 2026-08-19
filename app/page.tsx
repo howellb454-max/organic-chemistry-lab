@@ -1,8 +1,7 @@
 import { Search, FlaskConical, Puzzle, GraduationCap, Library } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Header } from "./components/header";
+import { SearchForm } from "./components/search-form";
 
 const features = [
   {
@@ -48,17 +47,9 @@ export default function Home() {
             para estudiantes y profesionales de la química.
           </p>
 
-          <form className="flex w-full max-w-md gap-2" action="/search" method="GET">
-            <Input
-              name="q"
-              placeholder="Busca una molécula... (ej. cafeína, aspirina)"
-              className="h-11 flex-1 text-base"
-            />
-            <Button type="submit" size="lg" className="h-11 px-6">
-              <Search className="mr-1 size-4" />
-              Buscar
-            </Button>
-          </form>
+          <div className="w-full max-w-md">
+            <SearchForm />
+          </div>
         </section>
 
         <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
