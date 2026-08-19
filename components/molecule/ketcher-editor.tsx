@@ -24,15 +24,19 @@ export function KetcherEditor({
   const ketcherRef = useRef<Ketcher | null>(null);
 
   const handleOnInit = useCallback(
-    (ketcher: Ketcher) => {
+    async (ketcher: Ketcher) => {
       ketcherRef.current = ketcher;
+
+      if (initialSmiles) {
+        try {
+          await ketcher.setMolecule(initialSmiles);
+        } catch (err) {
+          console.warn("Ketcher: failed to load molecule", err);
+        }
+      }
 
       if (readOnly) {
         ketcher.editor.options({ viewOnlyMode: true });
-      }
-
-      if (initialSmiles) {
-        ketcher.setMolecule(initialSmiles);
       }
     },
     [initialSmiles, readOnly]
