@@ -11,6 +11,8 @@ import {
   Binary,
   Search,
   AlertTriangle,
+  BookOpen,
+  CheckCircle2,
 } from "lucide-react";
 import { Header } from "../components/header";
 import { KetcherWrapper } from "@/components/molecule/ketcher-wrapper";
@@ -23,6 +25,7 @@ import {
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
+import { nameMolecule } from "@/lib/iupac-naming";
 
 interface AnalyzeResult {
   cid: number | null;
@@ -41,6 +44,8 @@ function BuilderContent() {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [iupacName, setIupacName] = useState<string | null>(null);
+  const [iupacError, setIupacError] = useState<string | null>(null);
 
   const handleAnalyze = useCallback(async () => {
     if (!ketcherApi) return;
@@ -48,6 +53,8 @@ function BuilderContent() {
     setAnalyzing(true);
     setResult(null);
     setError(null);
+    setIupacName(null);
+    setIupacError(null);
 
     try {
       const currentSmiles = await ketcherApi.getSmiles();
@@ -56,6 +63,13 @@ function BuilderContent() {
         setError("Dibuja una estructura primero.");
         setAnalyzing(false);
         return;
+      }
+
+      const naming = nameMolecule(currentSmiles);
+      if (naming.name) {
+        setIupacName(naming.name);
+      } else {
+        setIupacError(naming.error);
       }
 
       const res = await fetch(
@@ -121,6 +135,36 @@ function BuilderContent() {
               <CardContent className="flex items-center gap-3 p-4">
                 <FlaskConical className="size-5 shrink-0 text-destructive" />
                 <p className="text-sm">{error}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {iupacName && (
+            <Card className="mt-6 border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="flex items-center gap-3 p-4">
+                <CheckCircle2 className="size-5 shrink-0 text-emerald-500" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Nombre IUPAC generado
+                  </p>
+                  <p className="text-lg font-semibold">{iupacName}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {iupacError && (
+            <Card className="mt-6 border-amber-500/30 bg-amber-500/5">
+              <CardContent className="flex items-center gap-3 p-4">
+                <BookOpen className="size-5 shrink-0 text-amber-500" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Nomenclatura IUPAC
+                  </p>
+                  <p className="text-sm text-amber-600 dark:text-amber-400">
+                    {iupacError}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}
