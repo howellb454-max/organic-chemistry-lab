@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil, Globe } from "lucide-react";
+import { ArrowLeft, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil, Globe, ListOrdered, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Header } from "../../components/header";
 import { getCompoundByCid, getCompoundImageUrl } from "@/lib/pubchem";
 import { buttonVariants } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { CompoundStructure } from "./compound-structure";
 import { translateIupacToEs } from "@/lib/iupac-translate";
 import { getCommonNameEs } from "@/lib/common-names-es";
+import { nameMolecule } from "@/lib/iupac-naming";
 
 interface Props {
   params: Promise<{ cid: string }>;
@@ -28,6 +29,10 @@ export default async function CompoundPage({ params }: Props) {
   const builderUrl = compound.canonicalSMILES
     ? `/builder?smiles=${encodeURIComponent(compound.canonicalSMILES)}`
     : "/builder";
+
+  const naming = compound.canonicalSMILES
+    ? nameMolecule(compound.canonicalSMILES)
+    : null;
 
   const mainProps = [
     { icon: Hash, label: "CID", value: String(cid) },
@@ -142,10 +147,49 @@ export default async function CompoundPage({ params }: Props) {
           </div>
 
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Card className="border-emerald-500/30 bg-emerald-500/5">
+              <CardHeader>
+                <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <ListOrdered className="size-4 text-emerald-500" />
+                </div>
+                <CardTitle className="text-sm">Nomenclatura IUPAC</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {naming?.name ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+                      <span className="font-semibold">{naming.name}</span>
+                    </div>
+                    {naming.steps.length > 0 && (
+                      <ol className="space-y-2">
+                        {naming.steps.map((step, i) => (
+                          <li key={i} className="flex gap-2.5">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[10px] font-semibold text-emerald-500">
+                              {i + 1}
+                            </span>
+                            <p className="text-xs leading-relaxed text-muted-foreground pt-0.5">
+                              {step}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="size-4 shrink-0 text-amber-500 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                      {naming?.error || "No se pudo generar el nombre IUPAC para esta estructura."}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {[
               { title: "Grupos Funcionales", description: "Identificación automática de grupos funcionales presentes en la molécula." },
               { title: "Tipo de Compuesto", description: "Clasificación del compuesto según su estructura y propiedades." },
-              { title: "Nomenclatura", description: "Nombre sistemático IUPAC, común y trivial del compuesto." },
               { title: "Explicación Educativa", description: "Descripción accesible de la molécula, su uso y relevancia." },
               { title: "Reacciones Relacionadas", description: "Reacciones químicas en las que participa este compuesto." },
               { title: "Propiedades", description: "Punto de fusión, ebullición, solubilidad y otras propiedades fisicoquímicas." },
