@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
+  ListOrdered,
 } from "lucide-react";
 import { Header } from "../components/header";
 import { KetcherWrapper } from "@/components/molecule/ketcher-wrapper";
@@ -46,6 +47,7 @@ function BuilderContent() {
   const [error, setError] = useState<string | null>(null);
   const [iupacName, setIupacName] = useState<string | null>(null);
   const [iupacError, setIupacError] = useState<string | null>(null);
+  const [iupacSteps, setIupacSteps] = useState<string[]>([]);
 
   const handleAnalyze = useCallback(async () => {
     if (!ketcherApi) return;
@@ -55,6 +57,7 @@ function BuilderContent() {
     setError(null);
     setIupacName(null);
     setIupacError(null);
+    setIupacSteps([]);
 
     try {
       const currentSmiles = await ketcherApi.getSmiles();
@@ -68,6 +71,7 @@ function BuilderContent() {
       const naming = nameMolecule(currentSmiles);
       if (naming.name) {
         setIupacName(naming.name);
+        setIupacSteps(naming.steps);
       } else {
         setIupacError(naming.error);
       }
@@ -149,6 +153,33 @@ function BuilderContent() {
                   </p>
                   <p className="text-lg font-semibold">{iupacName}</p>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {iupacName && iupacSteps.length > 0 && (
+            <Card className="mt-4 border-emerald-500/20 bg-emerald-500/[0.03]">
+              <CardHeader>
+                <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <ListOrdered className="size-4 text-emerald-500" />
+                </div>
+                <CardTitle className="text-base">
+                  Desglose de Nomenclatura
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="space-y-3">
+                  {iupacSteps.map((step, i) => (
+                    <li key={i} className="flex gap-3">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-xs font-semibold text-emerald-500">
+                        {i + 1}
+                      </span>
+                      <p className="text-sm leading-relaxed text-muted-foreground pt-0.5">
+                        {step}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
               </CardContent>
             </Card>
           )}

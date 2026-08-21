@@ -6,14 +6,17 @@ import { buildName } from "./build-name";
 export interface NamingResult {
   name: string | null;
   error: string | null;
+  steps: string[];
 }
 
 export function nameMolecule(smiles: string): NamingResult {
+  const steps: string[] = [];
+
   try {
     const mol = parseSmiles(smiles);
 
     if (mol.atoms.length === 0) {
-      return { name: null, error: "No se pudo解析 la estructura molecular." };
+      return { name: null, error: "No se pudo解析 la estructura molecular.", steps };
     }
 
     const unsupported = hasUnsupportedElements(mol);
@@ -21,6 +24,7 @@ export function nameMolecule(smiles: string): NamingResult {
       return {
         name: null,
         error: `Esta estructura incluye elementos que aún no sabemos nombrar automáticamente (ej. ${unsupported}). Solo se soportan hidrocarburos con halógenos (F, Cl, Br, I).`,
+        steps,
       };
     }
 
@@ -29,25 +33,26 @@ export function nameMolecule(smiles: string): NamingResult {
       return {
         name: null,
         error: "Esta estructura contiene anillos. La nomenclatura de anillos aún no está soportada.",
+        steps,
       };
     }
 
-    const mainChain = findMainChain(mol);
+    const mainChain = findMainChain(mol, steps);
     if (!mainChain || mainChain.chain.length < 1) {
-      return { name: null, error: "No se pudo determinar la cadena principal." };
+      return { name: null, error: "No se pudo determinar la cadena principal.", steps };
     }
 
-    const numberingResult = numberChain(mol, mainChain);
-    const name = buildName(mol, numberingResult);
+    const numberingResult = numberChain(mol, mainChain, steps);
+    const name = buildName(mol, numberingResult, mainChain, steps);
 
     if (!name) {
-      return { name: null, error: "No se pudo generar el nombre IUPAC." };
+      return { name: null, error: "No se pudo generar el nombre IUPAC.", steps };
     }
 
-    return { name, error: null };
+    return { name, error: null, steps };
   } catch (err) {
     console.error("IUPAC naming error:", err);
-    return { name: null, error: "Error al procesar la estructura molecular." };
+    return { name: null, error: "Error al procesar la estructura molecular.", steps };
   }
 }
 

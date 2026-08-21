@@ -1,5 +1,6 @@
 import type { Molecule } from "./smiles-parser";
 import type { NumberingResult } from "./number-chain";
+import type { ChainResult } from "./find-main-chain";
 
 const PARENT_NAMES: Record<number, string> = {
   1: "met",
@@ -61,7 +62,9 @@ interface NamedSubstituent {
 
 export function buildName(
   mol: Molecule,
-  numberingResult: NumberingResult
+  numberingResult: NumberingResult,
+  chainResult?: ChainResult,
+  steps?: string[]
 ): string {
   const { chain, numbering, substituents } = numberingResult;
 
@@ -94,9 +97,15 @@ export function buildName(
   const hasDouble = chain.some((id, i) => i < chain.length - 1 && getBondOrder(id, chain[i + 1]) === 2);
   const hasTriple = chain.some((id, i) => i < chain.length - 1 && getBondOrder(id, chain[i + 1]) === 3);
 
-  let suffix = "ano";
-  if (hasTriple) suffix = "ino";
-  else if (hasDouble) suffix = "eno";
+  let alcoholLocants: number[] = [];
+  if (chainResult && chainResult.alcoholPositions.length > 0) {
+    alcoholLocants = chainResult.alcoholPositions
+      .map((id) => numbering.get(id))
+      .filter((loc): loc is number => loc !== undefined)
+      .sort((a, b) => a - b);
+  }
+
+  const hasAlcohol = alcoholLocants.length > 0;
 
   const grouped: Record<string, number[]> = {};
   for (const sub of substituents) {
@@ -131,13 +140,57 @@ export function buildName(
     }
   }
 
-  const unsatStr = unsaturationPositions.length > 0
-    ? unsaturationPositions.join(",") + "-"
-    : "";
-
   const parentName = getParentName(carbonCount);
   const subPart = parts.length > 0 ? parts.join("-") : "";
-  const fullName = subPart + unsatStr + parentName + suffix;
+  let fullName: string;
+
+  if (hasAlcohol) {
+    const ohLocantStr = alcoholLocants.join(",");
+    const ohMultiplier = alcoholLocants.length > 1 ? getMultiplier(alcoholLocants.length) : "";
+    const ohSuffix = `${ohLocantStr}-${ohMultiplier}ol`;
+
+    if (hasDouble || hasTriple) {
+      const unsatLocant = unsaturationPositions[0];
+      const unsatInfix = hasTriple ? `${unsatLocant}-in` : `${unsatLocant}-en`;
+      fullName = `${subPart}${parentName}-${unsatInfix}-${ohSuffix}`;
+    } else if (subPart.length > 0) {
+      fullName = `${subPart}${parentName}an-${ohSuffix}`;
+    } else if (ohLocantStr === "1" && alcoholLocants.length === 1 && carbonCount === 2) {
+      fullName = `${parentName}anol`;
+    } else {
+      fullName = `${parentName}an-${ohSuffix}`;
+    }
+  } else {
+    let suffix = "ano";
+    if (hasTriple) suffix = "ino";
+    else if (hasDouble) suffix = "eno";
+
+    const unsatStr = unsaturationPositions.length > 0
+      ? unsaturationPositions.join(",") + "-"
+      : "";
+
+    fullName = subPart + unsatStr + parentName + suffix;
+  }
+
+  if (steps) {
+    const alcoholCount = alcoholLocants.length;
+    if (alcoholCount > 0) {
+      const suffixName = alcoholCount === 1 ? "-ol" : alcoholCount === 2 ? "-diol" : "-triol";
+      const grupoText = alcoholCount === 1 ? "grupo" : "grupos";
+      steps.push(
+        `Sufijo: Se usó el sufijo ${suffixName} porque la molécula contiene ${alcoholCount} ${grupoText} alcohol como grupo principal.`
+      );
+    } else if (hasDouble || hasTriple) {
+      const tipo = hasTriple ? "triplete" : "doble";
+      steps.push(
+        `Sufijo: Se usó el sufijo -${hasTriple ? "ino" : "eno"} porque la molécula contiene un enlace ${tipo} como grupo funcional principal.`
+      );
+    } else {
+      steps.push(`Sufijo: Se usó el sufijo -ano (alcano saturado).`);
+    }
+
+    steps.push(`Nombre final: ${fullName}.`);
+  }
 
   return fullName;
 }

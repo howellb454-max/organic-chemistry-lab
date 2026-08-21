@@ -176,9 +176,10 @@ interface RawSubstituent {
 
 export function numberChain(
   mol: Molecule,
-  chainResult: ChainResult
+  chainResult: ChainResult,
+  steps?: string[]
 ): NumberingResult {
-  const { chain, unsaturationPositions } = chainResult;
+  const { chain, unsaturationPositions, alcoholPositions } = chainResult;
 
   if (chain.length === 0) {
     return { chain, numbering: new Map(), substituents: [] };
@@ -202,20 +203,39 @@ export function numberChain(
     }
   }
 
+  const hasAlcoholSuffix = alcoholPositions.length > 0;
+  const filteredSubs = hasAlcoholSuffix
+    ? rawSubstituents.filter((s) => s.name !== "hidroxi")
+    : rawSubstituents;
+
+  const ohIndices = alcoholPositions
+    .map((id) => chain.indexOf(id))
+    .filter((i) => i !== -1);
+
+  const ohForward = ohIndices.map((i) => i + 1);
+  const ohBackward = ohIndices.map((i) => chain.length - i);
+  const minOhForward = ohForward.length > 0 ? Math.min(...ohForward) : Infinity;
+  const minOhBackward = ohBackward.length > 0 ? Math.min(...ohBackward) : Infinity;
+
   const unsatForward = unsaturationPositions.map((u) => u.position + 1);
   const unsatBackward = unsaturationPositions.map((u) => chain.length - u.position - 1);
   const minUnsatForward = unsatForward.length > 0 ? Math.min(...unsatForward) : Infinity;
   const minUnsatBackward = unsatBackward.length > 0 ? Math.min(...unsatBackward) : Infinity;
 
-  let useForward: boolean;
-  if (minUnsatForward < minUnsatBackward) {
+  const locantsForward = filteredSubs.map((s) => s.chainIndex + 1).sort((a, b) => a - b);
+  const locantsBackward = filteredSubs.map((s) => chain.length - s.chainIndex).sort((a, b) => a - b);
+
+  let useForward = true;
+
+  if (minOhForward < minOhBackward) {
+    useForward = true;
+  } else if (minOhBackward < minOhForward) {
+    useForward = false;
+  } else if (minUnsatForward < minUnsatBackward) {
     useForward = true;
   } else if (minUnsatBackward < minUnsatForward) {
     useForward = false;
   } else {
-    const locantsForward = rawSubstituents.map((s) => s.chainIndex + 1).sort((a, b) => a - b);
-    const locantsBackward = rawSubstituents.map((s) => chain.length - s.chainIndex).sort((a, b) => a - b);
-    useForward = true;
     for (let i = 0; i < Math.max(locantsForward.length, locantsBackward.length); i++) {
       const f = locantsForward[i] ?? Infinity;
       const b = locantsBackward[i] ?? Infinity;
@@ -232,9 +252,44 @@ export function numberChain(
   }
 
   const substituents: Substituent[] = [];
-  for (const raw of rawSubstituents) {
+  for (const raw of filteredSubs) {
     const locant = useForward ? raw.chainIndex + 1 : chain.length - raw.chainIndex;
     substituents.push({ name: raw.name, chainPositions: [locant] });
+  }
+
+  if (steps) {
+    const fromLabel = useForward ? "izquierdo (C1)" : "derecho";
+    const toLabel = useForward ? "derecho" : "izquierdo (C1)";
+
+    if (alcoholPositions.length > 0) {
+      const ohLocantsForStep = useForward ? ohForward : ohBackward;
+      const ohLocantsJoined = ohLocantsForStep
+        .filter((loc) => loc !== Infinity)
+        .sort((a, b) => a - b)
+        .join(", ");
+      steps.push(
+        `Numeración: Se numeró de ${fromLabel} a ${toLabel} para asignar el localizador más bajo al grupo alcohol (posición ${ohLocantsJoined}).`
+      );
+    } else if (unsaturationPositions.length > 0) {
+      steps.push(
+        `Numeración: Se numeró de ${fromLabel} a ${toLabel} para asignar el localizador más bajo al enlace múltiple.`
+      );
+    } else if (filteredSubs.length > 0) {
+      steps.push(
+        `Numeración: Se numeró de ${fromLabel} a ${toLabel} para asignar el localizador más bajo al primer sustituyente.`
+      );
+    } else {
+      steps.push(`Numeración: Se numeró la cadena de ${fromLabel} a ${toLabel}.`);
+    }
+
+    if (substituents.length > 0) {
+      const sortedNames = substituents
+        .map((s) => s.name)
+        .sort((a, b) => a.localeCompare(b));
+      steps.push(
+        `Sustituyentes: Se detectaron y ordenaron alfabéticamente: ${sortedNames.join(", ")}.`
+      );
+    }
   }
 
   return { chain, numbering, substituents };
