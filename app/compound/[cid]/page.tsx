@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil, Globe, ListOrdered, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil, Globe, ListOrdered, CheckCircle2, AlertTriangle, Atom, BookOpen, Beaker } from "lucide-react";
 import { Header } from "../../components/header";
 import { getCompoundByCid, getCompoundImageUrl } from "@/lib/pubchem";
 import { buttonVariants } from "@/components/ui/button";
@@ -12,6 +12,86 @@ import { nameMolecule } from "@/lib/iupac-naming";
 
 interface Props {
   params: Promise<{ cid: string }>;
+}
+
+interface FunctionalGroup {
+  name: string;
+  formula: string;
+}
+
+const GROUP_KEYWORDS: Record<string, FunctionalGroup> = {
+  "alcohol": { name: "Grupo Alcohol", formula: "-OH" },
+  "metil": { name: "Metilo", formula: "-CH₃" },
+  "etil": { name: "Etilo", formula: "-C₂H₅" },
+  "cloro": { name: "Cloro", formula: "-Cl" },
+  "bromo": { name: "Bromo", formula: "-Br" },
+  "fluoro": { name: "Fluoro", formula: "-F" },
+  "yodo": { name: "Yodo", formula: "-I" },
+  "enlace doble": { name: "Enlace Doble", formula: "C=C" },
+  "enlace triple": { name: "Enlace Triple", formula: "C≡C" },
+};
+
+function detectFunctionalGroups(steps: string[]): FunctionalGroup[] {
+  const allText = steps.join(" ").toLowerCase();
+  const detected: FunctionalGroup[] = [];
+  const seen = new Set<string>();
+
+  const wordPatterns: Array<{ pattern: RegExp; group: FunctionalGroup }> = [
+    { pattern: /\balcohol\b/, group: GROUP_KEYWORDS["alcohol"] },
+    { pattern: /\bmetil\b/, group: GROUP_KEYWORDS["metil"] },
+    { pattern: /\betil\b/, group: GROUP_KEYWORDS["etil"] },
+    { pattern: /\bcloro\b/, group: GROUP_KEYWORDS["cloro"] },
+    { pattern: /\bbromo\b/, group: GROUP_KEYWORDS["bromo"] },
+    { pattern: /\bfluoro\b/, group: GROUP_KEYWORDS["fluoro"] },
+    { pattern: /\byodo\b/, group: GROUP_KEYWORDS["yodo"] },
+    { pattern: /enlace doble/, group: GROUP_KEYWORDS["enlace doble"] },
+    { pattern: /enlace triple/, group: GROUP_KEYWORDS["enlace triple"] },
+  ];
+
+  for (const { pattern, group } of wordPatterns) {
+    if (pattern.test(allText) && !seen.has(group.name)) {
+      detected.push(group);
+      seen.add(group.name);
+    }
+  }
+  return detected;
+}
+
+function classifyCompound(name: string | null, steps: string[]): string {
+  if (!name) return "No clasificable";
+  const n = name.toLowerCase();
+  const allSteps = steps.join(" ").toLowerCase();
+
+  if (n.includes("-diol") || n.includes("-triol") || n.endsWith("-ol")) return "Alcohol";
+  if (allSteps.includes("enlace doble")) return "Alqueno";
+  if (allSteps.includes("enlace triple")) return "Alquino";
+  if (n.includes("cloro") || n.includes("bromo") || n.includes("fluoro") || n.includes("yodo")) return "Haloalcano";
+  if (n.endsWith("ano")) return "Alcano";
+  return "Compuesto orgánico";
+}
+
+function buildEducationalSummary(name: string | null, steps: string[]): string {
+  if (!name) return "No hay suficiente información estructural para generar una explicación.";
+  const allText = steps.join(" ").toLowerCase();
+  const parts: string[] = [];
+
+  const chainMatch = allText.match(/cadena de (\d+) carbono/);
+  if (chainMatch) {
+    const n = parseInt(chainMatch[1], 10);
+    parts.push(`La molécula tiene una cadena principal de ${n} carbono${n > 1 ? "s" : ""}.`);
+  }
+
+  const type = classifyCompound(name, steps);
+  if (type === "Alcohol") parts.push("Pertenece a la familia de los alcoholes, caracterizados por el grupo hidroxilo (-OH).");
+  else if (type === "Alqueno") parts.push("Es un alqueno, lo que significa que contiene al menos un enlace doble carbono-carbono.");
+  else if (type === "Alquino") parts.push("Es un alquino, conteniendo un enlace triple carbono-carbono.");
+  else if (type === "Haloalcano") parts.push("Contiene halógenos unidos a la cadena de carbono.");
+  else if (type === "Alcano") parts.push("Es un alcano saturado, sin enlaces múltiples.");
+
+  if (/\bmetil\b/.test(allText)) parts.push("Tiene sustituyentes tipo metilo ramificados.");
+  if (/\betil\b/.test(allText)) parts.push("Presenta cadenas laterales de etilo.");
+
+  return parts.length > 0 ? parts.join(" ") : "Estructura orgánica sin grupos funcionales destacados.";
 }
 
 export default async function CompoundPage({ params }: Props) {
@@ -33,6 +113,10 @@ export default async function CompoundPage({ params }: Props) {
   const naming = compound.canonicalSMILES
     ? nameMolecule(compound.canonicalSMILES)
     : null;
+
+  const functionalGroups = detectFunctionalGroups(naming?.steps ?? []);
+  const compoundType = classifyCompound(naming?.name ?? null, naming?.steps ?? []);
+  const educationalSummary = buildEducationalSummary(naming?.name ?? null, naming?.steps ?? []);
 
   const mainProps = [
     { icon: Hash, label: "CID", value: String(cid) },
@@ -147,7 +231,7 @@ export default async function CompoundPage({ params }: Props) {
           </div>
 
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <Card className="rounded-xl border-emerald-500/30 bg-emerald-500/5">
               <CardHeader>
                 <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-emerald-500/10">
                   <ListOrdered className="size-4 text-emerald-500" />
@@ -187,25 +271,92 @@ export default async function CompoundPage({ params }: Props) {
               </CardContent>
             </Card>
 
-            {[
-              { title: "Grupos Funcionales", description: "Identificación automática de grupos funcionales presentes en la molécula." },
-              { title: "Tipo de Compuesto", description: "Clasificación del compuesto según su estructura y propiedades." },
-              { title: "Explicación Educativa", description: "Descripción accesible de la molécula, su uso y relevancia." },
-              { title: "Reacciones Relacionadas", description: "Reacciones químicas en las que participa este compuesto." },
-              { title: "Propiedades", description: "Punto de fusión, ebullición, solubilidad y otras propiedades fisicoquímicas." },
-            ].map((section) => (
-              <Card key={section.title} className="border-dashed opacity-60">
-                <CardHeader>
-                  <CardTitle className="text-sm">{section.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-muted-foreground">{section.description}</p>
-                  <p className="mt-2 text-xs font-medium text-emerald-500 dark:text-emerald-400">
-                    Próximamente
+            <Card className="rounded-xl border-emerald-500/30 bg-emerald-500/5">
+              <CardHeader>
+                <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <Atom className="size-4 text-emerald-500" />
+                </div>
+                <CardTitle className="text-sm">Grupos Funcionales</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {functionalGroups.length > 0 ? (
+                  <ul className="space-y-2">
+                    {functionalGroups.map((g) => (
+                      <li key={g.name} className="flex items-center justify-between rounded-lg bg-emerald-500/5 px-3 py-2">
+                        <span className="text-xs font-medium">{g.name}</span>
+                        <span className="font-mono text-xs text-emerald-500">{g.formula}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {naming?.name
+                      ? "No se detectaron grupos funcionales específicos."
+                      : "No disponible sin estructura molecular."}
                   </p>
-                </CardContent>
-              </Card>
-            ))}
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-xl border-emerald-500/30 bg-emerald-500/5">
+              <CardHeader>
+                <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <Beaker className="size-4 text-emerald-500" />
+                </div>
+                <CardTitle className="text-sm">Tipo de Compuesto</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {naming?.name ? (
+                  <div className="rounded-lg bg-emerald-500/5 px-3 py-2.5">
+                    <span className="text-sm font-semibold">{compoundType}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No disponible sin estructura molecular.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-xl border-emerald-500/30 bg-emerald-500/5">
+              <CardHeader>
+                <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <BookOpen className="size-4 text-emerald-500" />
+                </div>
+                <CardTitle className="text-sm">Explicación Educativa</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {naming?.name ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {educationalSummary}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No disponible sin estructura molecular.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-xl border-dashed opacity-60">
+              <CardHeader>
+                <CardTitle className="text-sm">Reacciones Relacionadas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">Reacciones químicas en las que participa este compuesto.</p>
+                <p className="mt-2 text-xs font-medium text-emerald-500 dark:text-emerald-400">Próximamente</p>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-xl border-dashed opacity-60">
+              <CardHeader>
+                <CardTitle className="text-sm">Propiedades</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">Punto de fusión, ebullición, solubilidad y otras propiedades fisicoquímicas.</p>
+                <p className="mt-2 text-xs font-medium text-emerald-500 dark:text-emerald-400">Próximamente</p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </main>
