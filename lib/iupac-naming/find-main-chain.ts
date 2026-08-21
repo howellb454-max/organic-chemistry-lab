@@ -1,9 +1,17 @@
 import type { Molecule } from "./smiles-parser";
+import {
+  detectAllFunctionalGroups,
+  GROUP_PRIORITY,
+  type DetectedGroup,
+  type FunctionalGroupType,
+} from "./functional-groups";
 
 export interface ChainResult {
   chain: number[];
   unsaturationPositions: { position: number; order: 2 | 3 }[];
   alcoholPositions: number[];
+  aminePositions: number[];
+  principalGroup: DetectedGroup | null;
 }
 
 function getBondOrder(mol: Molecule, a: number, b: number): 1 | 2 | 3 {
@@ -48,38 +56,48 @@ function findAlcoholCarbons(mol: Molecule): Set<number> {
 }
 
 interface ChainScore {
-  alcoholCount: number;
+  principalGroupPriority: number;
   length: number;
   unsaturationBonus: number;
 }
 
-function scoreChain(mol: Molecule, chain: number[], alcoholCarbons: Set<number>): ChainScore {
-  let alcoholCount = 0;
-  for (const atomId of chain) {
-    if (mol.atoms[atomId]?.element === "C" && alcoholCarbons.has(atomId)) alcoholCount++;
+function scoreChain(
+  mol: Molecule,
+  chain: number[],
+  groupsOnChain: DetectedGroup[]
+): ChainScore {
+  let maxPriority = 0;
+  for (const g of groupsOnChain) {
+    if (chain.includes(g.carbonId) && g.priority > maxPriority) {
+      maxPriority = g.priority;
+    }
   }
+
   let unsaturationBonus = 0;
   for (let i = 0; i < chain.length - 1; i++) {
     const order = getBondOrder(mol, chain[i], chain[i + 1]);
     if (order === 2) unsaturationBonus += 10;
     if (order === 3) unsaturationBonus += 20;
   }
-  return { alcoholCount, length: chain.length, unsaturationBonus };
+
+  return { principalGroupPriority: maxPriority, length: chain.length, unsaturationBonus };
 }
 
 function compareChains(
   mol: Molecule,
   a: number[],
   b: number[],
-  alcoholCarbons: Set<number>
+  groupsOnChain: DetectedGroup[]
 ): number {
   if (a.length === 0) return 1;
   if (b.length === 0) return -1;
 
-  const sa = scoreChain(mol, a, alcoholCarbons);
-  const sb = scoreChain(mol, b, alcoholCarbons);
+  const sa = scoreChain(mol, a, groupsOnChain);
+  const sb = scoreChain(mol, b, groupsOnChain);
 
-  if (sa.alcoholCount !== sb.alcoholCount) return sb.alcoholCount - sa.alcoholCount;
+  if (sa.principalGroupPriority !== sb.principalGroupPriority) {
+    return sb.principalGroupPriority - sa.principalGroupPriority;
+  }
   if (sa.length !== sb.length) return sb.length - sa.length;
   return sb.unsaturationBonus - sa.unsaturationBonus;
 }
@@ -93,16 +111,30 @@ function countUnsaturation(mol: Molecule, chain: number[]): number {
   return count;
 }
 
+const GROUP_LABELS: Record<FunctionalGroupType, string> = {
+  carboxylic_acid: "ácido carboxílico (-COOH)",
+  ester: "éster (-COOR)",
+  amide: "amida (-CONH₂)",
+  nitrile: "nitrilo (-CN)",
+  aldehyde: "aldehído (-CHO)",
+  ketone: "cetona (C=O)",
+  alcohol: "alcohol (-OH)",
+  amine: "amina (-NH₂)",
+  none: "",
+};
+
 export function findMainChain(mol: Molecule, steps?: string[]): ChainResult | null {
   if (mol.atoms.length === 0) return null;
 
+  const allGroups = detectAllFunctionalGroups(mol);
   const alcoholCarbons = findAlcoholCarbons(mol);
+
   let bestChain: number[] = [];
 
   for (let i = 0; i < mol.atoms.length; i++) {
     const paths = findAllPaths(mol, i, new Set());
     for (const path of paths) {
-      if (compareChains(mol, path, bestChain, alcoholCarbons) < 0) {
+      if (compareChains(mol, path, bestChain, allGroups) < 0) {
         bestChain = path;
       }
     }
@@ -110,27 +142,32 @@ export function findMainChain(mol: Molecule, steps?: string[]): ChainResult | nu
 
   if (bestChain.length === 0) return null;
 
-  const carbonCount = bestChain.filter((id) => mol.atoms[id]?.element === "C").length;
-  const bestScore = scoreChain(mol, bestChain, alcoholCarbons);
+  const principalGroup = allGroups.find((g) => bestChain.includes(g.carbonId)) ?? null;
+  const groupsOnChain = allGroups.filter((g) => bestChain.includes(g.carbonId));
+  const bestScore = scoreChain(mol, bestChain, allGroups);
   const unsatCount = countUnsaturation(mol, bestChain);
 
   if (steps) {
+    const carbonCount = bestChain.filter((id) => mol.atoms[id]?.element === "C").length;
     steps.push(
       `Cadena principal: Se identificó una cadena de ${carbonCount} carbono${carbonCount > 1 ? "s" : ""} como la de mayor prioridad.`
     );
 
-    if (bestScore.alcoholCount > 0) {
-      const grupoText = bestScore.alcoholCount === 1 ? "grupo" : "grupos";
+    if (principalGroup && principalGroup.type !== "none") {
+      const label = GROUP_LABELS[principalGroup.type];
       steps.push(
-        `Prioridad: Se eligió esta cadena porque contiene ${bestScore.alcoholCount} ${grupoText} alcohol (-OH).`
+        `Prioridad: Se eligió esta cadena porque contiene el grupo de mayor jerarquía: ${label}.`
+      );
+    } else if (bestScore.principalGroupPriority > 0 && principalGroup) {
+      const label = GROUP_LABELS[principalGroup.type];
+      steps.push(
+        `Prioridad: Grupo funcional detectado: ${label}.`
       );
     }
 
     if (unsatCount > 0) {
-      const tipos = bestScore.unsaturationBonus >= 20 ? "enlaces triples" : "enlaces dobles";
-      steps.push(
-        `Insaturación: Se detectaron ${unsatCount} ${tipos} en la cadena principal.`
-      );
+      const tipos = unsatCount > 1 ? "insaturaciones" : "insaturación";
+      steps.push(`Insaturación: Se detectó(n) ${unsatCount} ${tipos} en la cadena principal.`);
     }
   }
 
@@ -146,5 +183,25 @@ export function findMainChain(mol: Molecule, steps?: string[]): ChainResult | nu
     (id) => mol.atoms[id]?.element === "C" && alcoholCarbons.has(id)
   );
 
-  return { chain: bestChain, unsaturationPositions, alcoholPositions };
+  const aminePositions: number[] = [];
+  if (principalGroup?.type === "amine") {
+    for (const id of bestChain) {
+      const atom = mol.atoms[id];
+      if (atom?.element !== "C") continue;
+      for (const n of atom.neighbors) {
+        const nAtom = mol.atoms[n];
+        if (nAtom?.element !== "N") continue;
+        const cN = nAtom.neighbors.filter((x) => mol.atoms[x]?.element === "C");
+        if (cN.length === 1) aminePositions.push(id);
+      }
+    }
+  }
+
+  return {
+    chain: bestChain,
+    unsaturationPositions,
+    alcoholPositions,
+    aminePositions,
+    principalGroup,
+  };
 }

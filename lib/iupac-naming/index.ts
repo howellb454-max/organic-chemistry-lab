@@ -9,6 +9,10 @@ export interface NamingResult {
   steps: string[];
 }
 
+function hasRingClosures(mol: Molecule): boolean {
+  return mol.ringAtoms.size > 0;
+}
+
 export function nameMolecule(smiles: string): NamingResult {
   const steps: string[] = [];
 
@@ -23,18 +27,14 @@ export function nameMolecule(smiles: string): NamingResult {
     if (unsupported) {
       return {
         name: null,
-        error: `Esta estructura incluye elementos que aún no sabemos nombrar automáticamente (ej. ${unsupported}). Solo se soportan hidrocarburos con halógenos (F, Cl, Br, I).`,
+        error: `Esta estructura incluye elementos que aún no sabemos nombrar automáticamente (ej. ${unsupported}). Solo se soportan C, H, O, N y halógenos (F, Cl, Br, I).`,
         steps,
       };
     }
 
-    const hasRings = hasRingClosures(mol);
-    if (hasRings) {
-      return {
-        name: null,
-        error: "Esta estructura contiene anillos. La nomenclatura de anillos aún no está soportada.",
-        steps,
-      };
+    const isCyclic = hasRingClosures(mol);
+    if (isCyclic) {
+      steps.push("Estructura: Se detectó un ciclo en la molécula, se añadirá el prefijo 'ciclo-' al nombre del padre.");
     }
 
     const mainChain = findMainChain(mol, steps);
@@ -43,7 +43,7 @@ export function nameMolecule(smiles: string): NamingResult {
     }
 
     const numberingResult = numberChain(mol, mainChain, steps);
-    const name = buildName(mol, numberingResult, mainChain, steps);
+    const name = buildName(mol, numberingResult, mainChain, steps, isCyclic);
 
     if (!name) {
       return { name: null, error: "No se pudo generar el nombre IUPAC.", steps };
@@ -54,41 +54,4 @@ export function nameMolecule(smiles: string): NamingResult {
     console.error("IUPAC naming error:", err);
     return { name: null, error: "Error al procesar la estructura molecular.", steps };
   }
-}
-
-function hasRingClosures(mol: Molecule): boolean {
-  const visited = new Set<number>();
-  const recStack = new Set<number>();
-
-  function dfs(atomId: number, parentId: number): boolean {
-    visited.add(atomId);
-    recStack.add(atomId);
-    const atom = mol.atoms[atomId];
-    if (!atom) {
-      recStack.delete(atomId);
-      return false;
-    }
-    for (const neighbor of atom.neighbors) {
-      if (neighbor === parentId) continue;
-      if (recStack.has(neighbor)) {
-        recStack.delete(atomId);
-        return true;
-      }
-      if (!visited.has(neighbor)) {
-        if (dfs(neighbor, atomId)) {
-          recStack.delete(atomId);
-          return true;
-        }
-      }
-    }
-    recStack.delete(atomId);
-    return false;
-  }
-
-  for (let i = 0; i < mol.atoms.length; i++) {
-    if (!visited.has(i)) {
-      if (dfs(i, -1)) return true;
-    }
-  }
-  return false;
 }

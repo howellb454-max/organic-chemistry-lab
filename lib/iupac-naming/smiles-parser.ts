@@ -13,6 +13,7 @@ export interface Bond {
 export interface Molecule {
   atoms: Atom[];
   bonds: Bond[];
+  ringAtoms: Set<number>;
 }
 
 const ATOM_PATTERN = /([A-Z][a-z]?)/g;
@@ -33,12 +34,8 @@ function ensureAtom(mol: Molecule, id: number, element?: string): void {
   if (element) mol.atoms[id].element = element;
 }
 
-function isHalogen(el: string): boolean {
-  return ["F", "Cl", "Br", "I"].includes(el);
-}
-
 export function parseSmiles(smiles: string): Molecule {
-  const mol: Molecule = { atoms: [], bonds: [] };
+  const mol: Molecule = { atoms: [], bonds: [], ringAtoms: new Set() };
   let pos = 0;
   let currentAtom = -1;
   let pendingBondOrder: 1 | 2 | 3 = 1;
@@ -97,6 +94,8 @@ export function parseSmiles(smiles: string): Molecule {
       if (ringBonds.has(ringNum)) {
         const rb = ringBonds.get(ringNum)!;
         addBond(mol, rb.atomId, currentAtom, rb.order);
+        mol.ringAtoms.add(rb.atomId);
+        mol.ringAtoms.add(currentAtom);
         ringBonds.delete(ringNum);
       } else {
         ringBonds.set(ringNum, { atomId: currentAtom, order: pendingBondOrder });
@@ -108,6 +107,8 @@ export function parseSmiles(smiles: string): Molecule {
       if (ringBonds.has(ringNum)) {
         const rb = ringBonds.get(ringNum)!;
         addBond(mol, rb.atomId, currentAtom, rb.order);
+        mol.ringAtoms.add(rb.atomId);
+        mol.ringAtoms.add(currentAtom);
         ringBonds.delete(ringNum);
       } else {
         ringBonds.set(ringNum, { atomId: currentAtom, order: pendingBondOrder });
@@ -147,7 +148,7 @@ export function parseSmiles(smiles: string): Molecule {
 }
 
 export function hasUnsupportedElements(mol: Molecule): string | null {
-  const supported = new Set(["C", "H", "F", "Cl", "Br", "I", "O"]);
+  const supported = new Set(["C", "H", "F", "Cl", "Br", "I", "O", "N"]);
   for (const atom of mol.atoms) {
     if (!supported.has(atom.element)) {
       return atom.element;

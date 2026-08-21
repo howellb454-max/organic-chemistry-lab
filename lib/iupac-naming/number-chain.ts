@@ -1,5 +1,6 @@
 import type { Molecule } from "./smiles-parser";
 import type { ChainResult } from "./find-main-chain";
+import type { DetectedGroup } from "./functional-groups";
 
 function getBondOrder(mol: Molecule, a: number, b: number): 1 | 2 | 3 {
   for (const bond of mol.bonds) {
@@ -44,6 +45,7 @@ function getSubstituentName(mol: Molecule, startAtom: number, fromChainAtom: num
     const el = mol.atoms[startAtom]?.element || "C";
     if (el === "C") return { name: "metil", chainPositions: branchAtoms };
     if (el === "O") return { name: "hidroxi", chainPositions: branchAtoms };
+    if (el === "N") return { name: "amino", chainPositions: branchAtoms };
     if (el === "F") return { name: "fluoro", chainPositions: branchAtoms };
     if (el === "Cl") return { name: "cloro", chainPositions: branchAtoms };
     if (el === "Br") return { name: "bromo", chainPositions: branchAtoms };
@@ -172,6 +174,7 @@ export interface NumberingResult {
 interface RawSubstituent {
   name: string;
   chainIndex: number;
+  atomIds: number[];
 }
 
 export function numberChain(
@@ -179,7 +182,7 @@ export function numberChain(
   chainResult: ChainResult,
   steps?: string[]
 ): NumberingResult {
-  const { chain, unsaturationPositions, alcoholPositions } = chainResult;
+  const { chain, unsaturationPositions, alcoholPositions, aminePositions } = chainResult;
 
   if (chain.length === 0) {
     return { chain, numbering: new Map(), substituents: [] };
@@ -197,18 +200,39 @@ export function numberChain(
       if (!chainSet.has(neighbor)) {
         const sub = getSubstituentName(mol, neighbor, atomId);
         if (sub) {
-          rawSubstituents.push({ name: sub.name, chainIndex: i });
+          rawSubstituents.push({ name: sub.name, chainIndex: i, atomIds: sub.chainPositions });
         }
       }
     }
   }
 
   const hasAlcoholSuffix = alcoholPositions.length > 0;
-  const filteredSubs = hasAlcoholSuffix
-    ? rawSubstituents.filter((s) => s.name !== "hidroxi")
-    : rawSubstituents;
+  const principalGroup = chainResult.principalGroup;
+  const principalGroupAtoms = new Set<number>();
+  if (principalGroup) {
+    const pgAtom = mol.atoms[principalGroup.carbonId];
+    if (pgAtom) {
+      principalGroupAtoms.add(principalGroup.carbonId);
+      for (const n of pgAtom.neighbors) principalGroupAtoms.add(n);
+    }
+  }
+
+  const filteredSubs = rawSubstituents.filter((s) => {
+    if (hasAlcoholSuffix && s.name === "hidroxi") return false;
+    if (principalGroup?.type === "amine" && s.name === "amino") return false;
+    if (principalGroupAtoms.size > 0) {
+      for (const a of s.atomIds) {
+        if (principalGroupAtoms.has(a)) return false;
+      }
+    }
+    return true;
+  });
 
   const ohIndices = alcoholPositions
+    .map((id) => chain.indexOf(id))
+    .filter((i) => i !== -1);
+
+  const amineIndices = aminePositions
     .map((id) => chain.indexOf(id))
     .filter((i) => i !== -1);
 
@@ -216,6 +240,11 @@ export function numberChain(
   const ohBackward = ohIndices.map((i) => chain.length - i);
   const minOhForward = ohForward.length > 0 ? Math.min(...ohForward) : Infinity;
   const minOhBackward = ohBackward.length > 0 ? Math.min(...ohBackward) : Infinity;
+
+  const amForward = amineIndices.map((i) => i + 1);
+  const amBackward = amineIndices.map((i) => chain.length - i);
+  const minAmForward = amForward.length > 0 ? Math.min(...amForward) : Infinity;
+  const minAmBackward = amBackward.length > 0 ? Math.min(...amBackward) : Infinity;
 
   const unsatForward = unsaturationPositions.map((u) => u.position + 1);
   const unsatBackward = unsaturationPositions.map((u) => chain.length - u.position - 1);
@@ -230,6 +259,10 @@ export function numberChain(
   if (minOhForward < minOhBackward) {
     useForward = true;
   } else if (minOhBackward < minOhForward) {
+    useForward = false;
+  } else if (minAmForward < minAmBackward) {
+    useForward = true;
+  } else if (minAmBackward < minAmForward) {
     useForward = false;
   } else if (minUnsatForward < minUnsatBackward) {
     useForward = true;
@@ -269,6 +302,15 @@ export function numberChain(
         .join(", ");
       steps.push(
         `Numeración: Se numeró de ${fromLabel} a ${toLabel} para asignar el localizador más bajo al grupo alcohol (posición ${ohLocantsJoined}).`
+      );
+    } else if (aminePositions.length > 0) {
+      const amLocantsForStep = useForward ? amForward : amBackward;
+      const amLocantsJoined = amLocantsForStep
+        .filter((loc) => loc !== Infinity)
+        .sort((a, b) => a - b)
+        .join(", ");
+      steps.push(
+        `Numeración: Se numeró de ${fromLabel} a ${toLabel} para asignar el localizador más bajo al carbono unido al nitrógeno (posición ${amLocantsJoined}).`
       );
     } else if (unsaturationPositions.length > 0) {
       steps.push(
