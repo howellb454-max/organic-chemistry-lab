@@ -2,6 +2,7 @@ import type { Molecule } from "./smiles-parser";
 import type { NumberingResult } from "./number-chain";
 import type { ChainResult } from "./find-main-chain";
 import type { FunctionalGroupType } from "./functional-groups";
+import { getEsterAlkylName } from "./functional-groups";
 
 const PARENT_NAMES: Record<number, string> = {
   1: "met", 2: "et", 3: "prop", 4: "but", 5: "pent",
@@ -75,7 +76,8 @@ export function buildName(
   numberingResult: NumberingResult,
   chainResult?: ChainResult,
   steps?: string[],
-  isCyclic?: boolean
+  isCyclic?: boolean,
+  aromaticParent?: string | null
 ): string {
   const { chain, numbering, substituents } = numberingResult;
 
@@ -141,11 +143,14 @@ export function buildName(
   });
 
   const parts: string[] = [];
+  const allSingleOccurrences = namedSubs.every((s) => s.locants.length === 1);
+  const omitSubLocants =
+    carbonCount === 1 || (carbonCount === 2 && namedSubs.length === 1 && allSingleOccurrences);
   for (const sub of namedSubs) {
     const locantStr = sub.locants.join(",");
     const displayName =
       sub.locants.length === 1 ? sub.name : `${getMultiplier(sub.locants.length)}${sub.name}`;
-    if (carbonCount === 1) {
+    if (omitSubLocants) {
       parts.push(displayName);
     } else {
       parts.push(`${locantStr}-${displayName}`);
@@ -156,6 +161,24 @@ export function buildName(
   const cyclicPrefix = isCyclic ? "ciclo" : "";
   const subPrefix = parts.join("-");
   const simpleMolecule = carbonCount <= 2;
+  let fullName: string;
+
+  if (aromaticParent) {
+    let core: string;
+    if (namedSubs.length === 0) {
+      core = aromaticParent;
+    } else if (namedSubs.length === 1) {
+      core = `${namedSubs[0].name}${aromaticParent}`;
+    } else {
+      core = `${subPrefix}-${aromaticParent}`;
+    }
+    fullName = core;
+    if (steps) {
+      steps.push("Núcleo: El padre es 'benceno' porque se detectó un anillo aromático.");
+      steps.push(`Nombre final: ${fullName}.`);
+    }
+    return fullName;
+  }
 
   const collectLocantsOnChain = (
     predicate: (atomId: number) => boolean
@@ -167,8 +190,6 @@ export function buildName(
     }
     return [...locants].sort((a, b) => a - b);
   };
-
-  let fullName: string;
 
   if (pgType === "carboxylic_acid") {
     fullName = carbonCount === 1
@@ -200,7 +221,8 @@ export function buildName(
   } else if (pgType === "nitrile") {
     fullName = concatSegments(subPrefix, cyclicPrefix, parentName, "nitrilo");
   } else if (pgType === "ester") {
-    fullName = concatSegments(subPrefix, cyclicPrefix, parentName, "oato");
+    const alkyl = principalGroup ? getEsterAlkylName(mol, principalGroup.carbonId) : "metilo";
+    fullName = concatSegments(subPrefix, cyclicPrefix, parentName, `anoato de ${alkyl}`);
   } else if (hasAlcohol) {
     const ohBase = alcoholLocants.length > 1 ? `${getMultiplier(alcoholLocants.length)}ol` : "ol";
     let tail: string;

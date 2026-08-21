@@ -248,3 +248,29 @@ export function getPrincipalGroup(mol: Molecule): DetectedGroup | null {
 export function isOnChain(group: DetectedGroup, chain: number[]): boolean {
   return chain.includes(group.carbonId);
 }
+
+export function getEsterAlkylName(mol: Molecule, esterCarbon: number): string {
+  let bridgeO = -1;
+  for (const n of mol.atoms[esterCarbon]?.neighbors ?? []) {
+    if (mol.atoms[n]?.element === "O" && getBondOrder(mol, esterCarbon, n) === 1) {
+      bridgeO = n;
+      break;
+    }
+  }
+  if (bridgeO === -1) return "metilo";
+
+  const seen = new Set<number>([esterCarbon, bridgeO]);
+  const stack = [...(mol.atoms[bridgeO]?.neighbors ?? [])];
+  let carbonCount = 0;
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (mol.atoms[id]?.element !== "C") continue;
+    carbonCount++;
+    stack.push(...mol.atoms[id].neighbors);
+  }
+
+  const alkylNames = ["metilo", "etilo", "propilo", "butilo", "pentilo"];
+  return alkylNames[carbonCount - 1] ?? `${carbonCount}-carbonilo`;
+}

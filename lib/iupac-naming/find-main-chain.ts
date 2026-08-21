@@ -47,8 +47,13 @@ function findAlcoholCarbons(mol: Molecule): Set<number> {
     if (atom.element !== "C") continue;
     for (const neighbor of atom.neighbors) {
       if (mol.atoms[neighbor]?.element === "O") {
-        result.add(i);
-        break;
+        const oAtom = mol.atoms[neighbor]!;
+        const oOthers = oAtom.neighbors.filter((x) => x !== i);
+        const isBridge = oOthers.some((x) => mol.atoms[x]?.element !== "H");
+        if (!isBridge) {
+          result.add(i);
+          break;
+        }
       }
     }
   }
@@ -123,7 +128,7 @@ const GROUP_LABELS: Record<FunctionalGroupType, string> = {
   none: "",
 };
 
-export function findMainChain(mol: Molecule, steps?: string[]): ChainResult | null {
+export function findMainChain(mol: Molecule, steps?: string[], preferredChain?: number[]): ChainResult | null {
   if (mol.atoms.length === 0) return null;
 
   const allGroups = detectAllFunctionalGroups(mol);
@@ -131,11 +136,15 @@ export function findMainChain(mol: Molecule, steps?: string[]): ChainResult | nu
 
   let bestChain: number[] = [];
 
-  for (let i = 0; i < mol.atoms.length; i++) {
-    const paths = findAllPaths(mol, i, new Set());
-    for (const path of paths) {
-      if (compareChains(mol, path, bestChain, allGroups) < 0) {
-        bestChain = path;
+  if (preferredChain && preferredChain.length > 0) {
+    bestChain = preferredChain;
+  } else {
+    for (let i = 0; i < mol.atoms.length; i++) {
+      const paths = findAllPaths(mol, i, new Set());
+      for (const path of paths) {
+        if (compareChains(mol, path, bestChain, allGroups) < 0) {
+          bestChain = path;
+        }
       }
     }
   }

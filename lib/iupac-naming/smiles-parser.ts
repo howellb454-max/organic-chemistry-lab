@@ -2,6 +2,7 @@ export interface Atom {
   id: number;
   element: string;
   neighbors: number[];
+  aromatic?: boolean;
 }
 
 export interface Bond {
@@ -64,6 +65,8 @@ export function parseSmiles(smiles: string): Molecule {
     return "C";
   }
 
+  const AROMATIC_ELEMENTS: Record<string, string> = { c: "C", n: "N", o: "O", s: "S" };
+
   while (pos < smiles.length) {
     const ch = smiles[pos];
 
@@ -83,6 +86,18 @@ export function parseSmiles(smiles: string): Molecule {
       }
       pendingBondOrder = 1;
       currentAtom = nextId;
+    } else if (AROMATIC_ELEMENTS[ch] !== undefined) {
+      const el = AROMATIC_ELEMENTS[ch];
+      const nextId = mol.atoms.length;
+      ensureAtom(mol, nextId, el);
+      mol.atoms[nextId].aromatic = true;
+
+      if (currentAtom >= 0) {
+        addBond(mol, currentAtom, nextId, pendingBondOrder);
+      }
+      pendingBondOrder = 1;
+      currentAtom = nextId;
+      pos++;
     } else if (ch === "=") {
       pendingBondOrder = 2;
       pos++;

@@ -16,7 +16,34 @@ export interface Substituent {
   chainPositions: number[];
 }
 
+function countAlkoxyCarbons(mol: Molecule, startAtomId: number, fromChainAtom: number): number {
+  const seen = new Set<number>([startAtomId, fromChainAtom]);
+  const stack = [...(mol.atoms[startAtomId]?.neighbors ?? [])];
+  let count = 0;
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (mol.atoms[id]?.element !== "C") continue;
+    count++;
+    stack.push(...mol.atoms[id].neighbors);
+  }
+  return count;
+}
+
 function getSubstituentName(mol: Molecule, startAtom: number, fromChainAtom: number): Substituent | null {
+  const startEl = mol.atoms[startAtom]?.element;
+  if (startEl === "O") {
+    const otherNeighbors = (mol.atoms[startAtom]?.neighbors ?? []).filter((x) => x !== fromChainAtom);
+    const bridgesToCarbon = otherNeighbors.some((x) => mol.atoms[x]?.element === "C");
+    if (bridgesToCarbon) {
+      const cCount = countAlkoxyCarbons(mol, startAtom, fromChainAtom);
+      const alkoxyNames = ["metoxi", "etoxi", "propoxi", "butoxi"];
+      const name = alkoxyNames[cCount - 1] ?? `${cCount}-oxi`;
+      return { name, chainPositions: [startAtom, ...otherNeighbors] };
+    }
+  }
+
   const branchAtoms: number[] = [];
   const visited = new Set<number>([fromChainAtom]);
 
