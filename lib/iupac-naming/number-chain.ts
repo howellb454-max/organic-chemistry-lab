@@ -43,6 +43,7 @@ function getSubstituentName(mol: Molecule, startAtom: number, fromChainAtom: num
   if (branchAtoms.length === 1) {
     const el = mol.atoms[startAtom]?.element || "C";
     if (el === "C") return { name: "metil", chainPositions: branchAtoms };
+    if (el === "O") return { name: "hidroxi", chainPositions: branchAtoms };
     if (el === "F") return { name: "fluoro", chainPositions: branchAtoms };
     if (el === "Cl") return { name: "cloro", chainPositions: branchAtoms };
     if (el === "Br") return { name: "bromo", chainPositions: branchAtoms };
