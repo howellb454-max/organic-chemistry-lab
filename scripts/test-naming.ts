@@ -1,9 +1,13 @@
 import { nameMolecule } from "../lib/iupac-naming/index";
+import { getCompoundType } from "../lib/iupac-naming/functional-groups";
 
 interface Case {
   smiles: string;
   expected: string | null;
   describe: string;
+  principalType?: string;
+  secondaryTypes?: string[];
+  compoundType?: string;
 }
 
 const NEW_CASES: Case[] = [
@@ -18,7 +22,13 @@ const NEW_CASES: Case[] = [
 ];
 
 const REGRESSION_CASES: Case[] = [
-  { smiles: "CC(C)OC", expected: "2-metoxipropano", describe: "éter ramificado" },
+  {
+    smiles: "CC(C)OC",
+    expected: "2-metoxipropano",
+    describe: "éter ramificado",
+    principalType: "ether",
+    compoundType: "Éter",
+  },
   { smiles: "CCOCC", expected: "etoxietano", describe: "dietil éter" },
   { smiles: "O=Cc1ccccc1", expected: "benzaldehído", describe: "nombre retenido aromático" },
   { smiles: "OC(=O)c1ccccc1", expected: "ácido benzoico", describe: "ácido aromático" },
@@ -32,6 +42,31 @@ const CONSERVATION_CASES: Case[] = [
   { smiles: "C[O-][N+](=O)", expected: null, describe: "nitrito no soportado" },
 ];
 
+const DISPLAY_CASES: Case[] = [
+  {
+    smiles: "CCS",
+    expected: "etanotiol",
+    describe: "tiol único se marca principal",
+    principalType: "thiol",
+    compoundType: "Tiol",
+  },
+  {
+    smiles: "[O-][N+](=O)c1ccccc1",
+    expected: "nitrobenceno",
+    describe: "nitro único se marca principal",
+    principalType: "nitro",
+    compoundType: "Aromático con nitro",
+  },
+  {
+    smiles: "OCCS",
+    expected: "2-sulfaniletan-1-ol",
+    describe: "dos grupos: alcohol principal, tiol secundario",
+    principalType: "alcohol",
+    secondaryTypes: ["thiol"],
+    compoundType: "Alcohol",
+  },
+];
+
 let passed = 0;
 let failed = 0;
 
@@ -41,13 +76,52 @@ function run(label: string, cases: Case[]) {
     const result = nameMolecule(c.smiles);
     const got = result.name ?? `ERROR: ${result.error}`;
     const expected = c.expected ?? "<error>";
-    const ok = c.expected === null ? result.name === null && result.error !== null : result.name === c.expected;
+    const groups = result.functionalGroupsDetected ?? [];
+
+    const problems: string[] = [];
+    let ok =
+      c.expected === null
+        ? result.name === null && result.error !== null
+        : result.name === c.expected;
+    if (!ok) problems.push(`nombre esperado "${expected}"`);
+
+    if (c.principalType !== undefined) {
+      const principals = groups.filter((g) => g.isPrincipal);
+      const match = principals.length === 1 && principals[0].type === c.principalType;
+      if (!match) {
+        ok = false;
+        problems.push(`principal "${c.principalType}" (obtuvo ${JSON.stringify(principals.map((g) => g.type))})`);
+      }
+    }
+
+    if (c.secondaryTypes) {
+      for (const t of c.secondaryTypes) {
+        const g = groups.find((x) => x.type === t);
+        if (!g || g.isPrincipal) {
+          ok = false;
+          problems.push(`secundario "${t}"`);
+        }
+      }
+    }
+
+    if (c.compoundType !== undefined) {
+      const type = getCompoundType(groups, result.steps);
+      if (type !== c.compoundType) {
+        ok = false;
+        problems.push(`tipo "${c.compoundType}" (obtuvo "${type}")`);
+      }
+    }
+
     if (ok) {
       passed++;
-      console.log(`  PASS  ${c.smiles.padEnd(28)} -> ${got}`);
+      const extra =
+        c.principalType !== undefined
+          ? `  [principal: ${c.principalType}${c.compoundType ? `, tipo: ${c.compoundType}` : ""}]`
+          : "";
+      console.log(`  PASS  ${c.smiles.padEnd(28)} -> ${got}${extra}`);
     } else {
       failed++;
-      console.log(`  FAIL  ${c.smiles.padEnd(28)} -> ${got}  (esperado: ${expected})`);
+      console.log(`  FAIL  ${c.smiles.padEnd(28)} -> ${got}  (${problems.join("; ")})`);
     }
   }
 }
@@ -55,6 +129,7 @@ function run(label: string, cases: Case[]) {
 run("Nuevos: tiol y nitro", NEW_CASES);
 run("Regresión", REGRESSION_CASES);
 run("Conservación (deben dar error)", CONSERVATION_CASES);
+run("Grupos funcionales (display)", DISPLAY_CASES);
 
 console.log(`\nRESULTADO: ${passed} pasan, ${failed} fallan`);
 if (failed > 0) process.exitCode = 1;

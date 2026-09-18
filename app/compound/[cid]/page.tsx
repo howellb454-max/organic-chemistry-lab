@@ -10,26 +10,33 @@ import { CompoundStructure } from "./compound-structure";
 import { translateIupacToEs } from "@/lib/iupac-translate";
 import { getCommonNameEs } from "@/lib/common-names-es";
 import { nameMolecule } from "@/lib/iupac-naming";
+import { getCompoundType } from "@/lib/iupac-naming/functional-groups";
 
 interface Props {
   params: Promise<{ cid: string }>;
 }
 
-function classifyCompound(name: string | null, steps: string[]): string {
-  if (!name) return "No clasificable";
-  const n = name.toLowerCase();
-  const allSteps = steps.join(" ").toLowerCase();
+const FAMILY_DESCRIPTIONS: Record<string, string> = {
+  "Alcohol": "Pertenece a la familia de los alcoholes, caracterizados por el grupo hidroxilo (-OH).",
+  "Éter": "Es un éter, con un átomo de oxígeno unido a dos cadenas de carbono (R-O-R').",
+  "Tiol": "Es un tiol, caracterizado por el grupo sulfhidrilo (-SH).",
+  "Aldehído": "Es un aldehído, con un grupo carbonilo terminal (-CHO).",
+  "Cetona": "Es una cetona, con un grupo carbonilo entre dos carbonos (C=O).",
+  "Ácido carboxílico": "Es un ácido carboxílico, con el grupo carboxilo (-COOH).",
+  "Éster": "Es un éster, con el grupo funcional (-COO-).",
+  "Amida": "Es una amida, con el grupo funcional (-CONH₂).",
+  "Nitrilo": "Es un nitrilo, con un grupo ciano (-C≡N).",
+  "Amina": "Es una amina, con un nitrógeno unido a la cadena de carbono (-NH₂).",
+  "Nitroalcano": "Contiene un grupo nitro (-NO₂) unido a una cadena de carbono.",
+  "Aromático con nitro": "Es un compuesto aromático que lleva un grupo nitro (-NO₂) sobre el anillo de benceno.",
+  "Aromático": "Es un compuesto aromático con un anillo de benceno.",
+  "Alqueno": "Es un alqueno, lo que significa que contiene al menos un enlace doble carbono-carbono.",
+  "Alquino": "Es un alquino, conteniendo un enlace triple carbono-carbono.",
+  "Haloalcano": "Contiene halógenos unidos a la cadena de carbono.",
+  "Alcano": "Es un alcano saturado, sin enlaces múltiples.",
+};
 
-  if (n.includes("-diol") || n.includes("-triol") || n.endsWith("-ol")) return "Alcohol";
-  if (allSteps.includes("enlace doble")) return "Alqueno";
-  if (allSteps.includes("enlace triple")) return "Alquino";
-  if (n.includes("cloro") || n.includes("bromo") || n.includes("fluoro") || n.includes("yodo")) return "Haloalcano";
-  if (n.endsWith("ano")) return "Alcano";
-  return "Compuesto orgánico";
-}
-
-function buildEducationalSummary(name: string | null, steps: string[]): string {
-  if (!name) return "No hay suficiente información estructural para generar una explicación.";
+function buildEducationalSummary(compoundType: string, steps: string[]): string {
   const allText = steps.join(" ").toLowerCase();
   const parts: string[] = [];
 
@@ -39,12 +46,8 @@ function buildEducationalSummary(name: string | null, steps: string[]): string {
     parts.push(`La molécula tiene una cadena principal de ${n} carbono${n > 1 ? "s" : ""}.`);
   }
 
-  const type = classifyCompound(name, steps);
-  if (type === "Alcohol") parts.push("Pertenece a la familia de los alcoholes, caracterizados por el grupo hidroxilo (-OH).");
-  else if (type === "Alqueno") parts.push("Es un alqueno, lo que significa que contiene al menos un enlace doble carbono-carbono.");
-  else if (type === "Alquino") parts.push("Es un alquino, conteniendo un enlace triple carbono-carbono.");
-  else if (type === "Haloalcano") parts.push("Contiene halógenos unidos a la cadena de carbono.");
-  else if (type === "Alcano") parts.push("Es un alcano saturado, sin enlaces múltiples.");
+  const familyDescription = FAMILY_DESCRIPTIONS[compoundType];
+  if (familyDescription) parts.push(familyDescription);
 
   if (/\bmetil\b/.test(allText)) parts.push("Tiene sustituyentes tipo metilo ramificados.");
   if (/\betil\b/.test(allText)) parts.push("Presenta cadenas laterales de etilo.");
@@ -86,8 +89,8 @@ export default async function CompoundPage({ params }: Props) {
     : null;
 
   const functionalGroups = naming?.functionalGroupsDetected ?? [];
-  const compoundType = classifyCompound(naming?.name ?? null, naming?.steps ?? []);
-  const educationalSummary = buildEducationalSummary(naming?.name ?? null, naming?.steps ?? []);
+  const compoundType = getCompoundType(functionalGroups, naming?.steps ?? []);
+  const educationalSummary = buildEducationalSummary(compoundType, naming?.steps ?? []);
 
   const mainProps = compound
     ? [

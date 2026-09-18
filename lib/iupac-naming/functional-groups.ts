@@ -340,10 +340,11 @@ function findEthers(mol: Molecule): FunctionalGroupInfo[] {
 
 /**
  * Lista de grupos funcionales para mostrar en la UI, reutilizando la
- * detección estructural del motor. Marca como principal el grupo de mayor
- * prioridad (o todos los del mismo tipo, p. ej. el -diol) y como
- * sustituyentes el resto, incluyendo nitro y éteres (que nunca son
- * principales). Un hidrocarburo sin heteroátomos devuelve [].
+ * detección estructural del motor. Si solo hay un grupo, se marca como
+ * principal (aunque en IUPAC estricto sea un sustituyente, como éter o
+ * nitro). Si hay varios, es principal el de mayor prioridad IUPAC con
+ * sufijo y el resto son sustituyentes. Un hidrocarburo sin heteroátomos
+ * devuelve [].
  */
 export function detectFunctionalGroupsForDisplay(mol: Molecule): FunctionalGroupInfo[] {
   const namingGroups = detectAllFunctionalGroups(mol);
@@ -368,7 +369,50 @@ export function detectFunctionalGroupsForDisplay(mol: Molecule): FunctionalGroup
     result.push(group);
   }
 
+  if (result.length === 1) {
+    result[0].isPrincipal = true;
+  }
+
   return result;
+}
+
+const FAMILY_BY_TYPE: Record<DisplayGroupType, string> = {
+  carboxylic_acid: "Ácido carboxílico",
+  ester: "Éster",
+  amide: "Amida",
+  nitrile: "Nitrilo",
+  aldehyde: "Aldehído",
+  ketone: "Cetona",
+  alcohol: "Alcohol",
+  thiol: "Tiol",
+  amine: "Amina",
+  ether: "Éter",
+  nitro: "Nitroalcano",
+  none: "Compuesto orgánico",
+};
+
+/**
+ * Familia química ("Tipo de Compuesto") derivada del grupo funcional
+ * principal efectivo de `detectFunctionalGroupsForDisplay`. Si no hay
+ * grupo funcional, usa señales estructurales de los pasos del motor
+ * (aromaticidad, insaturaciones) y, como último recurso, "Alcano".
+ * Nunca inspecciona el nombre IUPAC.
+ */
+export function getCompoundType(groups: FunctionalGroupInfo[], steps: string[] = []): string {
+  const principal = groups.find((g) => g.isPrincipal);
+  if (principal) {
+    if (principal.type === "nitro" && steps.some((s) => /anillo aromático/i.test(s))) {
+      return "Aromático con nitro";
+    }
+    return FAMILY_BY_TYPE[principal.type] ?? "Compuesto orgánico";
+  }
+
+  const text = steps.join(" ").toLowerCase();
+  if (text.includes("anillo aromático")) return "Aromático";
+  if (text.includes("enlace triple")) return "Alquino";
+  if (text.includes("enlace doble")) return "Alqueno";
+  if (/bromo|cloro|fluoro|yodo/.test(text)) return "Haloalcano";
+  return "Alcano";
 }
 
 export function isOnChain(group: DetectedGroup, chain: number[]): boolean {
