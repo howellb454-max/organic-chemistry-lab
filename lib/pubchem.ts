@@ -1,3 +1,7 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readFile, rename, writeFile } from "node:fs/promises";
+
 const PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug";
 
 export interface CompoundResult {
@@ -30,6 +34,71 @@ export interface CompoundDetail extends CompoundResult {
 const cache = new Map<string, { data: CompoundResult; expiry: number }>();
 const detailCache = new Map<number, { data: CompoundDetail; expiry: number }>();
 const CACHE_TTL = 1000 * 60 * 60;
+
+const CACHE_FILE = join(tmpdir(), "organic-lab-pubchem-cache.json");
+const WRITE_MIN_INTERVAL_MS = 1000;
+
+let cacheLoaded = false;
+let writeTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingWrite = false;
+let lastWriteAt = 0;
+
+interface CacheSerialized {
+  cache: Array<[string, { data: CompoundResult; expiry: number }]>;
+  detailCache: Array<[number, { data: CompoundDetail; expiry: number }]>;
+}
+
+async function loadDiskCache(): Promise<void> {
+  if (cacheLoaded) return;
+  cacheLoaded = true;
+  try {
+    const raw = await readFile(CACHE_FILE, "utf8");
+    const parsed = JSON.parse(raw) as Partial<CacheSerialized>;
+    const now = Date.now();
+    let restored = 0;
+    for (const [key, entry] of parsed.cache ?? []) {
+      if (entry?.expiry > now) {
+        cache.set(key, entry as { data: CompoundResult; expiry: number });
+        restored++;
+      }
+    }
+    for (const [key, entry] of parsed.detailCache ?? []) {
+      if (entry?.expiry > now) {
+        detailCache.set(key, entry as { data: CompoundDetail; expiry: number });
+        restored++;
+      }
+    }
+    if (restored > 0) {
+      console.log(`[pubchem-cache] cache hit (disk): ${restored} entradas restauradas`);
+    }
+  } catch {
+    // archivo ausente o corrupto: seguir con caché en memoria vacía
+  }
+}
+
+function scheduleCacheWrite(): void {
+  pendingWrite = true;
+  if (writeTimer) return;
+  const wait = Math.max(0, lastWriteAt + WRITE_MIN_INTERVAL_MS - Date.now());
+  writeTimer = setTimeout(() => {
+    writeTimer = null;
+    void flushCache();
+  }, wait);
+}
+
+async function flushCache(): Promise<void> {
+  if (!pendingWrite) return;
+  pendingWrite = false;
+  lastWriteAt = Date.now();
+  try {
+    const data: CacheSerialized = { cache: [...cache], detailCache: [...detailCache] };
+    const tmpPath = `${CACHE_FILE}.tmp`;
+    await writeFile(tmpPath, JSON.stringify(data), "utf8");
+    await rename(tmpPath, CACHE_FILE);
+  } catch {
+    // fallo de escritura (permisos, disco lleno): ignorar y seguir con memoria
+  }
+}
 
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
 const MAX_RETRIES = 2;
@@ -76,8 +145,13 @@ async function pubchemFetch(
 
 export async function searchCompound(query: string): Promise<CompoundResult> {
   const key = query.toLowerCase().trim();
+  await loadDiskCache();
   const cached = cache.get(key);
-  if (cached && cached.expiry > Date.now()) return cached.data;
+  if (cached && cached.expiry > Date.now()) {
+    console.log(`[pubchem-cache] cache hit (memory): ${key}`);
+    return cached.data;
+  }
+  console.log(`[pubchem-cache] cache miss: ${key} -> consultando PubChem`);
 
   const propertiesUrl = `${PUBCHEM_BASE}/compound/name/${encodeURIComponent(key)}/property/MolecularFormula,MolecularWeight,CanonicalSMILES/JSON`;
   const cidsUrl = `${PUBCHEM_BASE}/compound/name/${encodeURIComponent(key)}/cids/JSON`;
@@ -113,6 +187,7 @@ export async function searchCompound(query: string): Promise<CompoundResult> {
   };
 
   cache.set(key, { data: result, expiry: Date.now() + CACHE_TTL });
+  scheduleCacheWrite();
   return result;
 }
 
@@ -121,8 +196,13 @@ export function getCompoundImageUrl(cid: number): string {
 }
 
 export async function getCompoundByCid(cid: number): Promise<CompoundDetail | null> {
+  await loadDiskCache();
   const cached = detailCache.get(cid);
-  if (cached && cached.expiry > Date.now()) return cached.data;
+  if (cached && cached.expiry > Date.now()) {
+    console.log(`[pubchem-cache] cache hit (memory): cid ${cid}`);
+    return cached.data;
+  }
+  console.log(`[pubchem-cache] cache miss: cid ${cid} -> consultando PubChem`);
 
   const propsUrl = `${PUBCHEM_BASE}/compound/cid/${cid}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName,InChI,InChIKey,XLogP,TPSA,HBondDonorCount,HBondAcceptorCount,Complexity/JSON`;
   const synUrl = `${PUBCHEM_BASE}/compound/cid/${cid}/synonyms/JSON`;
@@ -176,6 +256,7 @@ export async function getCompoundByCid(cid: number): Promise<CompoundDetail | nu
   };
 
   detailCache.set(cid, { data: result, expiry: Date.now() + CACHE_TTL });
+  scheduleCacheWrite();
   return result;
 }
 

@@ -1,4 +1,4 @@
-import { Search, FlaskConical, Puzzle, GraduationCap, Library } from "lucide-react";
+import { Search, FlaskConical, Puzzle, GraduationCap } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Header } from "./components/header";
 import { SearchForm } from "./components/search-form";
@@ -19,11 +19,12 @@ const features = [
     title: "Modo Educativo",
     description: "Aprende sobre reacciones, mecanismos y propiedades con contenido paso a paso.",
   },
-  {
-    icon: Library,
-    title: "Biblioteca de Compuestos",
-    description: "Guarda, organiza y accede a tu colección personal de moléculas favoritas.",
-  },
+  // TODO: reactivar cuando /compounds esté implementado
+  // {
+  //   icon: Library,
+  //   title: "Biblioteca de Compuestos",
+  //   description: "Guarda, organiza y accede a tu colección personal de moléculas favoritas.",
+  // },
 ];
 
 export default function Home() {

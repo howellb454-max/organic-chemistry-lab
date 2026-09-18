@@ -6,7 +6,8 @@ const navLinks = [
   { href: "/search", label: "Buscar" },
   { href: "/builder", label: "Builder" },
   { href: "/learn", label: "Aprender" },
-  { href: "/compounds", label: "Compuestos" },
+  // TODO: reactivar cuando /compounds esté implementado
+  // { href: "/compounds", label: "Compuestos" },
 ];
 
 export function Header() {

@@ -5,29 +5,26 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Atom, FlaskConical, ArrowRight, AlertTriangle, Weight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { CompoundResult, getCompoundImageUrl } from "@/lib/pubchem";
+import type { CompoundResult } from "@/lib/pubchem";
+import { getCompoundImageUrl } from "@/lib/pubchem-image";
 
 export function SearchResults() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const q = searchParams.get("q")?.trim() ?? "";
+  return <Results key={q} query={q} />;
+}
+
+function Results({ query }: { query: string }) {
+  const router = useRouter();
 
   const [result, setResult] = useState<CompoundResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!q) {
-      setResult(null);
-      setError(null);
-      return;
-    }
+    if (!query) return;
 
-    setLoading(true);
-    setResult(null);
-    setError(null);
-
-    fetch(`/api/search?q=${encodeURIComponent(q)}`)
+    fetch(`/api/search?q=${encodeURIComponent(query)}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) {
@@ -38,9 +35,9 @@ export function SearchResults() {
       })
       .catch(() => setError("Error de conexión. Intenta de nuevo."))
       .finally(() => setLoading(false));
-  }, [q]);
+  }, [query]);
 
-  if (!q) {
+  if (!query) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-20 text-center">
         <Atom className="mb-4 size-10 text-muted-foreground" />
@@ -56,7 +53,7 @@ export function SearchResults() {
       <div className="flex flex-col items-center justify-center py-20">
         <div className="mb-4 size-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
         <p className="text-sm text-muted-foreground">
-          Buscando &quot;{q}&quot; en PubChem...
+          Buscando &quot;{query}&quot; en PubChem...
         </p>
       </div>
     );
