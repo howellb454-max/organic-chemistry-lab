@@ -394,11 +394,15 @@ const FAMILY_BY_TYPE: Record<DisplayGroupType, string> = {
 /**
  * Familia química ("Tipo de Compuesto") derivada del grupo funcional
  * principal efectivo de `detectFunctionalGroupsForDisplay`. Si no hay
- * grupo funcional, usa señales estructurales de los pasos del motor
- * (aromaticidad, insaturaciones) y, como último recurso, "Alcano".
- * Nunca inspecciona el nombre IUPAC.
+ * grupo funcional, usa señales estructurales (`hasCycle` y señales de
+ * aromaticidad/insaturación en los pasos del motor) y, como último
+ * recurso, "Alcano". Nunca inspecciona el nombre IUPAC.
  */
-export function getCompoundType(groups: FunctionalGroupInfo[], steps: string[] = []): string {
+export function getCompoundType(
+  groups: FunctionalGroupInfo[],
+  steps: string[] = [],
+  hasCycle = false
+): string {
   const principal = groups.find((g) => g.isPrincipal);
   if (principal) {
     if (principal.type === "nitro" && steps.some((s) => /anillo aromático/i.test(s))) {
@@ -412,6 +416,7 @@ export function getCompoundType(groups: FunctionalGroupInfo[], steps: string[] =
   if (text.includes("enlace triple")) return "Alquino";
   if (text.includes("enlace doble")) return "Alqueno";
   if (/bromo|cloro|fluoro|yodo/.test(text)) return "Haloalcano";
+  if (hasCycle) return "Cicloalcano";
   return "Alcano";
 }
 

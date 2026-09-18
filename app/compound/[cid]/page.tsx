@@ -34,6 +34,7 @@ const FAMILY_DESCRIPTIONS: Record<string, string> = {
   "Alquino": "Es un alquino, conteniendo un enlace triple carbono-carbono.",
   "Haloalcano": "Contiene halógenos unidos a la cadena de carbono.",
   "Alcano": "Es un alcano saturado, sin enlaces múltiples.",
+  "Cicloalcano": "Es un cicloalcano: un alcano saturado cuyos carbonos forman uno o más anillos.",
 };
 
 function buildEducationalSummary(compoundType: string, steps: string[]): string {
@@ -89,7 +90,7 @@ export default async function CompoundPage({ params }: Props) {
     : null;
 
   const functionalGroups = naming?.functionalGroupsDetected ?? [];
-  const compoundType = getCompoundType(functionalGroups, naming?.steps ?? []);
+  const compoundType = getCompoundType(functionalGroups, naming?.steps ?? [], naming?.isCyclic);
   const educationalSummary = buildEducationalSummary(compoundType, naming?.steps ?? []);
 
   const mainProps = compound

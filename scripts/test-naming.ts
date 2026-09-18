@@ -65,6 +65,25 @@ const DISPLAY_CASES: Case[] = [
     secondaryTypes: ["thiol"],
     compoundType: "Alcohol",
   },
+  {
+    smiles: "C1CCCCC1",
+    expected: "ciclohexano",
+    describe: "ciclohexano se clasifica como Cicloalcano",
+    compoundType: "Cicloalcano",
+  },
+  {
+    smiles: "CCCCCC",
+    expected: "hexano",
+    describe: "alcano lineal sigue siendo Alcano",
+    compoundType: "Alcano",
+  },
+  {
+    smiles: "OC1CCCCC1",
+    expected: "ciclohexan-1-ol",
+    describe: "ciclohexanol: el grupo alcohol gana sobre el ciclo",
+    principalType: "alcohol",
+    compoundType: "Alcohol",
+  },
 ];
 
 let passed = 0;
@@ -105,7 +124,7 @@ function run(label: string, cases: Case[]) {
     }
 
     if (c.compoundType !== undefined) {
-      const type = getCompoundType(groups, result.steps);
+      const type = getCompoundType(groups, result.steps, result.isCyclic);
       if (type !== c.compoundType) {
         ok = false;
         problems.push(`tipo "${c.compoundType}" (obtuvo "${type}")`);

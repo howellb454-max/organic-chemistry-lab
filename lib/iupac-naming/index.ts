@@ -19,6 +19,7 @@ export interface NamingResult {
   error: string | null;
   steps: string[];
   functionalGroupsDetected?: FunctionalGroupInfo[];
+  isCyclic: boolean;
 }
 
 function hasRingClosures(mol: Molecule): boolean {
@@ -214,12 +215,14 @@ function validateNamingConsistency(
 
 export function nameMolecule(smiles: string): NamingResult {
   const steps: string[] = [];
+  let isCyclic = false;
 
   try {
     const mol = parseSmiles(smiles);
+    isCyclic = hasRingClosures(mol);
 
     if (mol.atoms.length === 0) {
-      return { name: null, error: "No se pudo解析 la estructura molecular.", steps };
+      return { name: null, error: "No se pudo解析 la estructura molecular.", steps, isCyclic };
     }
 
     const unsupported = hasUnsupportedElements(mol);
@@ -229,15 +232,15 @@ export function nameMolecule(smiles: string): NamingResult {
         name: null,
         error: `Esta estructura contiene ${nombre} (${unsupported}), que aún no es compatible con el nomenclador automático. Solo se soportan C, H, O, N y halógenos (F, Cl, Br, I).`,
         steps,
+        isCyclic,
       };
     }
 
     const unsupportedGroup = findUnsupportedGroupError(mol);
     if (unsupportedGroup) {
-      return { name: null, error: unsupportedGroup, steps };
+      return { name: null, error: unsupportedGroup, steps, isCyclic };
     }
 
-    const isCyclic = hasRingClosures(mol);
     if (isCyclic) {
       steps.push("Estructura: Se detectó un ciclo en la molécula, se añadirá el prefijo 'ciclo-' al nombre del padre.");
     }
@@ -258,6 +261,7 @@ export function nameMolecule(smiles: string): NamingResult {
         error:
           "Esta estructura contiene un sistema aromático (anillos fusionados o heterociclos) que el nomenclador aún no sabe nombrar con certeza.",
         steps,
+        isCyclic,
       };
     }
 
@@ -266,7 +270,7 @@ export function nameMolecule(smiles: string): NamingResult {
       if (retained) {
         steps.push(retained.explanation);
         steps.push(`Nombre final: ${retained.name}.`);
-        return { name: retained.name, error: null, steps, functionalGroupsDetected };
+        return { name: retained.name, error: null, steps, functionalGroupsDetected, isCyclic };
       }
     }
 
@@ -276,14 +280,14 @@ export function nameMolecule(smiles: string): NamingResult {
       aromaticCycle ? [...aromaticCycle] : undefined
     );
     if (!mainChain || mainChain.chain.length < 1) {
-      return { name: null, error: "No se pudo determinar la cadena principal.", steps, functionalGroupsDetected };
+      return { name: null, error: "No se pudo determinar la cadena principal.", steps, functionalGroupsDetected, isCyclic };
     }
 
     const numberingResult = numberChain(mol, mainChain, steps);
     const name = buildName(mol, numberingResult, mainChain, steps, isCyclic, aromaticParent);
 
     if (!name) {
-      return { name: null, error: "No se pudo generar el nombre IUPAC.", steps, functionalGroupsDetected };
+      return { name: null, error: "No se pudo generar el nombre IUPAC.", steps, functionalGroupsDetected, isCyclic };
     }
 
     const topGroup = allGroups[0] ?? null;
@@ -293,12 +297,12 @@ export function nameMolecule(smiles: string): NamingResult {
       topGroup,
     });
     if (consistencyError) {
-      return { name: null, error: consistencyError, steps, functionalGroupsDetected };
+      return { name: null, error: consistencyError, steps, functionalGroupsDetected, isCyclic };
     }
 
-    return { name, error: null, steps, functionalGroupsDetected };
+    return { name, error: null, steps, functionalGroupsDetected, isCyclic };
   } catch (err) {
     console.error("IUPAC naming error:", err);
-    return { name: null, error: "Error al procesar la estructura molecular.", steps };
+    return { name: null, error: "Error al procesar la estructura molecular.", steps, isCyclic };
   }
 }
