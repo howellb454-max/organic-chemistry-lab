@@ -2,8 +2,15 @@ import { parseSmiles, hasUnsupportedElements, type Molecule } from "./smiles-par
 import { findMainChain } from "./find-main-chain";
 import { numberChain } from "./number-chain";
 import { buildName } from "./build-name";
-import { detectAllFunctionalGroups, GROUP_LABELS_ES, type FunctionalGroupType, type DetectedGroup } from "./functional-groups";
-import { tryRetainedAromaticName } from "./aromatic-names";
+import {
+  detectAllFunctionalGroups,
+  GROUP_LABELS_ES,
+  isThiolSulfur,
+  type FunctionalGroupType,
+  type DetectedGroup,
+} from "./functional-groups";
+import { isNitroGroup } from "./nitro-group";
+import { tryBenzeneSubstitutedName } from "./aromatic-names";
 
 export interface NamingResult {
   name: string | null;
@@ -13,6 +20,31 @@ export interface NamingResult {
 
 function hasRingClosures(mol: Molecule): boolean {
   return mol.ringAtoms.size > 0;
+}
+
+function findUnsupportedGroupError(mol: Molecule): string | null {
+  for (let i = 0; i < mol.atoms.length; i++) {
+    const atom = mol.atoms[i];
+    if (!atom) continue;
+
+    if (atom.element === "S" && !isThiolSulfur(mol, i)) {
+      return "Esta estructura contiene azufre (S) en un grupo que aún no sabemos nombrar con certeza (sulfuros, sulfonas, sulfóxidos, disulfuros, etc.).";
+    }
+
+    if (atom.element === "N") {
+      const hasO = atom.neighbors.some((n) => mol.atoms[n]?.element === "O");
+      if (hasO && !isNitroGroup(mol, i)) {
+        return "Esta estructura incluye nitrógeno unido a oxígeno en un grupo que aún no sabemos nombrar con certeza.";
+      }
+      const hasDoubleC = atom.neighbors.some(
+        (n) => mol.atoms[n]?.element === "C" && getBondOrder(mol, i, n) === 2
+      );
+      if (hasDoubleC) {
+        return "Esta estructura incluye enlaces carbono-nitrógeno con doble enlace (iminas u oximas) que aún no sabemos nombrar con certeza.";
+      }
+    }
+  }
+  return null;
 }
 
 function getBondOrder(mol: Molecule, a: number, b: number): 1 | 2 | 3 {
@@ -109,6 +141,7 @@ const SUFFIX_MARKERS: Record<FunctionalGroupType, RegExp> = {
   aldehyde: /(anal|aldehído)/,
   ketone: /ona/,
   alcohol: /ol$/,
+  thiol: /tiol/,
   amine: /amina/,
   none: /./,
 };
@@ -196,6 +229,11 @@ export function nameMolecule(smiles: string): NamingResult {
       };
     }
 
+    const unsupportedGroup = findUnsupportedGroupError(mol);
+    if (unsupportedGroup) {
+      return { name: null, error: unsupportedGroup, steps };
+    }
+
     const isCyclic = hasRingClosures(mol);
     if (isCyclic) {
       steps.push("Estructura: Se detectó un ciclo en la molécula, se añadirá el prefijo 'ciclo-' al nombre del padre.");
@@ -220,7 +258,7 @@ export function nameMolecule(smiles: string): NamingResult {
     }
 
     if (aromaticCycle) {
-      const retained = tryRetainedAromaticName(mol, [...aromaticCycle]);
+      const retained = tryBenzeneSubstitutedName(mol, [...aromaticCycle]);
       if (retained) {
         steps.push(retained.explanation);
         steps.push(`Nombre final: ${retained.name}.`);

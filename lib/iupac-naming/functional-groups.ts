@@ -1,4 +1,5 @@
 import type { Molecule } from "./smiles-parser";
+import { isNitroGroup } from "./nitro-group";
 
 export type FunctionalGroupType =
   | "carboxylic_acid"
@@ -8,6 +9,7 @@ export type FunctionalGroupType =
   | "aldehyde"
   | "ketone"
   | "alcohol"
+  | "thiol"
   | "amine"
   | "none";
 
@@ -25,18 +27,20 @@ export const GROUP_LABELS_ES: Record<FunctionalGroupType, string> = {
   aldehyde: "aldehído (-CHO)",
   ketone: "cetona (C=O)",
   alcohol: "alcohol (-OH)",
+  thiol: "tiol (-SH)",
   amine: "amina (-NH₂)",
   none: "",
 };
 
 export const GROUP_PRIORITY: Record<FunctionalGroupType, number> = {
-  carboxylic_acid: 8,
-  ester: 7,
-  amide: 6,
-  nitrile: 5,
-  aldehyde: 4,
-  ketone: 3,
-  alcohol: 2,
+  carboxylic_acid: 9,
+  ester: 8,
+  amide: 7,
+  nitrile: 6,
+  aldehyde: 5,
+  ketone: 4,
+  alcohol: 3,
+  thiol: 2,
   amine: 1,
   none: 0,
 };
@@ -224,6 +228,7 @@ function findAmines(mol: Molecule): DetectedGroup[] {
   for (let i = 0; i < mol.atoms.length; i++) {
     const atom = mol.atoms[i];
     if (atom.element !== "N") continue;
+    if (isNitroGroup(mol, i)) continue;
     const carbonNeighbors = atom.neighbors.filter((n) => mol.atoms[n]?.element === "C");
     if (carbonNeighbors.length === 1) {
       const alreadyAmide = findAmides(mol).some((g) => {
@@ -238,6 +243,28 @@ function findAmines(mol: Molecule): DetectedGroup[] {
   return results;
 }
 
+export function isThiolSulfur(mol: Molecule, atomId: number): boolean {
+  const atom = mol.atoms[atomId];
+  if (!atom || atom.element !== "S") return false;
+  const heavy = atom.neighbors.filter((n) => mol.atoms[n] && mol.atoms[n].element !== "H");
+  if (heavy.length !== 1) return false;
+  return mol.atoms[heavy[0]]?.element === "C";
+}
+
+function findThiols(mol: Molecule): DetectedGroup[] {
+  const results: DetectedGroup[] = [];
+  for (let i = 0; i < mol.atoms.length; i++) {
+    if (mol.atoms[i]?.element !== "S") continue;
+    if (!isThiolSulfur(mol, i)) continue;
+    const carbon = mol.atoms[i].neighbors.find(
+      (n) => mol.atoms[n]?.element === "C"
+    );
+    if (carbon === undefined) continue;
+    results.push({ type: "thiol", carbonId: carbon, priority: GROUP_PRIORITY.thiol });
+  }
+  return results;
+}
+
 export function detectAllFunctionalGroups(mol: Molecule): DetectedGroup[] {
   const groups: DetectedGroup[] = [
     ...findCarboxylicAcids(mol),
@@ -247,6 +274,7 @@ export function detectAllFunctionalGroups(mol: Molecule): DetectedGroup[] {
     ...findAldehydes(mol),
     ...findKetones(mol),
     ...findAlcohols(mol),
+    ...findThiols(mol),
     ...findAmines(mol),
   ];
   return groups.sort((a, b) => b.priority - a.priority);

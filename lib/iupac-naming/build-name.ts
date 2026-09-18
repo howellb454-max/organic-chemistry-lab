@@ -67,6 +67,7 @@ const SUFFIX_MAP: Record<FunctionalGroupType, string> = {
   aldehyde: "al",
   ketone: "ona",
   alcohol: "ol",
+  thiol: "tiol",
   amine: "amina",
   none: "",
 };
@@ -121,7 +122,16 @@ export function buildName(
       .sort((a, b) => a - b);
   }
 
+  let thiolLocants: number[] = [];
+  if (chainResult && chainResult.thiolPositions.length > 0) {
+    thiolLocants = chainResult.thiolPositions
+      .map((id) => numbering.get(id))
+      .filter((loc): loc is number => loc !== undefined)
+      .sort((a, b) => a - b);
+  }
+
   const hasAlcohol = alcoholLocants.length > 0;
+  const hasThiol = thiolLocants.length > 0;
 
   const grouped: Record<string, number[]> = {};
   for (const sub of substituents) {
@@ -145,7 +155,12 @@ export function buildName(
   const parts: string[] = [];
   const allSingleOccurrences = namedSubs.every((s) => s.locants.length === 1);
   const omitSubLocants =
-    carbonCount === 1 || (carbonCount === 2 && namedSubs.length === 1 && allSingleOccurrences);
+    carbonCount === 1 ||
+    (carbonCount === 2 &&
+      namedSubs.length === 1 &&
+      allSingleOccurrences &&
+      !hasAlcohol &&
+      !hasThiol);
   for (const sub of namedSubs) {
     const locantStr = sub.locants.join(",");
     const displayName =
@@ -232,10 +247,25 @@ export function buildName(
       tail = `-${unsatInfix}-${formatSuffix(alcoholLocants, ohBase)}`;
     } else if (alcoholLocants.length > 1) {
       tail = `ano-${formatSuffix(alcoholLocants, ohBase)}`;
-    } else if (simpleMolecule) {
+    } else if (simpleMolecule && subPrefix === "") {
       tail = `an${ohBase}`;
     } else {
       tail = `an-${formatSuffix(alcoholLocants, ohBase)}`;
+    }
+    fullName = concatSegments(subPrefix, cyclicPrefix, parentName, tail);
+  } else if (hasThiol) {
+    const thBase = thiolLocants.length > 1 ? `${getMultiplier(thiolLocants.length)}tiol` : "tiol";
+    let tail: string;
+    if (hasDouble || hasTriple) {
+      const unsatLocant = unsaturationPositions[0];
+      const unsatInfix = hasTriple ? `${unsatLocant}-in` : `${unsatLocant}-en`;
+      tail = `-${unsatInfix}-${formatSuffix(thiolLocants, thBase)}`;
+    } else if (thiolLocants.length > 1) {
+      tail = `ano-${formatSuffix(thiolLocants, thBase)}`;
+    } else if (simpleMolecule && subPrefix === "") {
+      tail = `ano${thBase}`;
+    } else {
+      tail = `ano-${formatSuffix(thiolLocants, thBase)}`;
     }
     fullName = concatSegments(subPrefix, cyclicPrefix, parentName, tail);
   } else {
@@ -253,7 +283,7 @@ export function buildName(
   }
 
   if (steps) {
-    if (pgType !== "none" && pgType !== "alcohol") {
+    if (pgType !== "none" && pgType !== "alcohol" && pgType !== "thiol") {
       steps.push(`Sufijo: Se usó el sufijo del grupo funcional principal (${pgType}).`);
     } else if (hasAlcohol) {
       const alcoholCount = alcoholLocants.length;
@@ -261,6 +291,13 @@ export function buildName(
       const grupoText = alcoholCount === 1 ? "grupo" : "grupos";
       steps.push(
         `Sufijo: Se usó el sufijo ${suffixName} porque la molécula contiene ${alcoholCount} ${grupoText} alcohol como grupo principal.`
+      );
+    } else if (hasThiol) {
+      const thiolCount = thiolLocants.length;
+      const suffixName = thiolCount === 1 ? "-tiol" : thiolCount === 2 ? "-ditiol" : "-tritiol";
+      const grupoText = thiolCount === 1 ? "grupo" : "grupos";
+      steps.push(
+        `Sufijo: Se usó el sufijo ${suffixName} porque la molécula contiene ${thiolCount} ${grupoText} tiol como grupo principal.`
       );
     } else if (hasDouble || hasTriple) {
       const tipo = hasTriple ? "triple" : "doble";

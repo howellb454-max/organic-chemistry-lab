@@ -2,6 +2,7 @@ import type { Molecule } from "./smiles-parser";
 import {
   detectAllFunctionalGroups,
   GROUP_PRIORITY,
+  isThiolSulfur,
   type DetectedGroup,
   type FunctionalGroupType,
 } from "./functional-groups";
@@ -10,6 +11,7 @@ export interface ChainResult {
   chain: number[];
   unsaturationPositions: { position: number; order: 2 | 3 }[];
   alcoholPositions: number[];
+  thiolPositions: number[];
   aminePositions: number[];
   principalGroup: DetectedGroup | null;
 }
@@ -56,6 +58,17 @@ function findAlcoholCarbons(mol: Molecule): Set<number> {
         }
       }
     }
+  }
+  return result;
+}
+
+function findThiolCarbons(mol: Molecule): Set<number> {
+  const result = new Set<number>();
+  for (let i = 0; i < mol.atoms.length; i++) {
+    if (mol.atoms[i]?.element !== "S") continue;
+    if (!isThiolSulfur(mol, i)) continue;
+    const carbon = mol.atoms[i].neighbors.find((n) => mol.atoms[n]?.element === "C");
+    if (carbon !== undefined) result.add(carbon);
   }
   return result;
 }
@@ -124,6 +137,7 @@ const GROUP_LABELS: Record<FunctionalGroupType, string> = {
   aldehyde: "aldehído (-CHO)",
   ketone: "cetona (C=O)",
   alcohol: "alcohol (-OH)",
+  thiol: "tiol (-SH)",
   amine: "amina (-NH₂)",
   none: "",
 };
@@ -133,6 +147,7 @@ export function findMainChain(mol: Molecule, steps?: string[], preferredChain?: 
 
   const allGroups = detectAllFunctionalGroups(mol);
   const alcoholCarbons = findAlcoholCarbons(mol);
+  const thiolCarbons = findThiolCarbons(mol);
 
   let bestChain: number[] = [];
 
@@ -192,6 +207,10 @@ export function findMainChain(mol: Molecule, steps?: string[], preferredChain?: 
     (id) => mol.atoms[id]?.element === "C" && alcoholCarbons.has(id)
   );
 
+  const thiolPositions = bestChain.filter(
+    (id) => mol.atoms[id]?.element === "C" && thiolCarbons.has(id)
+  );
+
   const aminePositions: number[] = [];
   if (principalGroup?.type === "amine") {
     for (const id of bestChain) {
@@ -210,6 +229,7 @@ export function findMainChain(mol: Molecule, steps?: string[], preferredChain?: 
     chain: bestChain,
     unsaturationPositions,
     alcoholPositions,
+    thiolPositions,
     aminePositions,
     principalGroup,
   };

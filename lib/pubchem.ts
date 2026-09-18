@@ -35,10 +35,15 @@ const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
 const MAX_RETRIES = 2;
 const RETRY_DELAYS_MS = [0, 800, 2400];
 
-async function pubchemFetch(url: string): Promise<Response> {
+async function pubchemFetch(
+  url: string,
+  opts: { silent?: boolean } = {}
+): Promise<Response> {
+  const { silent = false } = opts;
+  const maxRetries = silent ? 0 : MAX_RETRIES;
   let lastResponse: Response | null = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const delay = RETRY_DELAYS_MS[attempt] ?? 0;
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));
 
@@ -47,19 +52,24 @@ async function pubchemFetch(url: string): Promise<Response> {
       if (res.ok) return res;
       if (!RETRYABLE_STATUSES.has(res.status)) return res;
       lastResponse = res;
-      console.warn(
-        `PubChem HTTP ${res.status} en intento ${attempt + 1}/${MAX_RETRIES + 1}: ${url}`
-      );
+      if (!silent) {
+        console.warn(
+          `PubChem HTTP ${res.status} en intento ${attempt + 1}/${maxRetries + 1}: ${url}`
+        );
+      }
     } catch (err: unknown) {
-      if (attempt === MAX_RETRIES) throw err;
-      console.warn(`PubChem error de red en intento ${attempt + 1}: ${err}`);
+      if (attempt === maxRetries) throw err;
+      if (!silent) console.warn(`PubChem error de red en intento ${attempt + 1}: ${err}`);
     }
   }
+
+  if (silent && lastResponse) return lastResponse;
+  if (silent) return new Response(null, { status: 503 });
 
   const status = lastResponse?.status ?? 503;
   const body = lastResponse ? await lastResponse.text().catch(() => "") : "";
   console.error(
-    `PubChem no disponible después de ${MAX_RETRIES + 1} intentos. HTTP ${status} ${body}`
+    `PubChem no disponible después de ${maxRetries + 1} intentos. HTTP ${status} ${body}`
   );
   throw new PubChemUnavailableError(status);
 }
@@ -200,7 +210,7 @@ export async function getExperimentalProperties(
     EXPERIMENTAL_HEADINGS.map(async (heading) => {
       try {
         const url = `${PUG_VIEW_BASE}/data/compound/${cid}/JSON?heading=${heading}`;
-        const res = await pubchemFetch(url);
+        const res = await pubchemFetch(url, { silent: true });
         if (!res.ok) return null;
         const json = await res.json();
         const sections: Record<string, unknown>[] =

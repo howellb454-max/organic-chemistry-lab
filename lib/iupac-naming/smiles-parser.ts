@@ -163,7 +163,7 @@ export function parseSmiles(smiles: string): Molecule {
 }
 
 export function hasUnsupportedElements(mol: Molecule): string | null {
-  const supported = new Set(["C", "H", "F", "Cl", "Br", "I", "O", "N"]);
+  const supported = new Set(["C", "H", "F", "Cl", "Br", "I", "O", "N", "S"]);
   for (const atom of mol.atoms) {
     if (!supported.has(atom.element)) {
       return atom.element;

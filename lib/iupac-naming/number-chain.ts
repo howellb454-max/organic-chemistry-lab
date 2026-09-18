@@ -1,6 +1,7 @@
 import type { Molecule } from "./smiles-parser";
 import type { ChainResult } from "./find-main-chain";
 import type { DetectedGroup } from "./functional-groups";
+import { isNitroGroup } from "./nitro-group";
 
 function getBondOrder(mol: Molecule, a: number, b: number): 1 | 2 | 3 {
   for (const bond of mol.bonds) {
@@ -44,6 +45,13 @@ function getSubstituentName(mol: Molecule, startAtom: number, fromChainAtom: num
     }
   }
 
+  if (startEl === "N" && isNitroGroup(mol, startAtom)) {
+    const oxygens = mol.atoms[startAtom].neighbors.filter(
+      (x) => mol.atoms[x]?.element === "O"
+    );
+    return { name: "nitro", chainPositions: [startAtom, ...oxygens] };
+  }
+
   const branchAtoms: number[] = [];
   const visited = new Set<number>([fromChainAtom]);
 
@@ -73,6 +81,7 @@ function getSubstituentName(mol: Molecule, startAtom: number, fromChainAtom: num
     if (el === "C") return { name: "metil", chainPositions: branchAtoms };
     if (el === "O") return { name: "hidroxi", chainPositions: branchAtoms };
     if (el === "N") return { name: "amino", chainPositions: branchAtoms };
+    if (el === "S") return { name: "sulfanil", chainPositions: branchAtoms };
     if (el === "F") return { name: "fluoro", chainPositions: branchAtoms };
     if (el === "Cl") return { name: "cloro", chainPositions: branchAtoms };
     if (el === "Br") return { name: "bromo", chainPositions: branchAtoms };
@@ -127,6 +136,12 @@ function getSubstituentName(mol: Molecule, startAtom: number, fromChainAtom: num
   if (halogenCount > 0 && carbonCount > 0) {
     const halogenName = getHalogenName(halogenNames(halogenCount, halogens));
     const carbonPrefix = getCarbonPrefix(carbonCount);
+    if (halogenCount === 1 && carbonCount >= 2) {
+      const loc = halogenLocant(mol, branchAtoms, startAtom, halogens[0]);
+      if (loc !== null) {
+        return { name: `(${loc}-${halogenName}${carbonPrefix}il)`, chainPositions: branchAtoms };
+      }
+    }
     return { name: halogenName + carbonPrefix + "il", chainPositions: branchAtoms };
   }
 
@@ -135,6 +150,39 @@ function getSubstituentName(mol: Molecule, startAtom: number, fromChainAtom: num
   }
 
   return null;
+}
+
+function halogenLocant(
+  mol: Molecule,
+  branchAtoms: number[],
+  startAtom: number,
+  halogenElement: string
+): number | null {
+  const carbonBranch = branchAtoms.filter((id) => mol.atoms[id]?.element === "C");
+  const halogenAtom = branchAtoms.find((id) => mol.atoms[id]?.element === halogenElement);
+  if (halogenAtom === undefined) return null;
+  const carbonWithHalogen = (mol.atoms[halogenAtom]?.neighbors ?? []).find((n) =>
+    carbonBranch.includes(n)
+  );
+  if (carbonWithHalogen === undefined) return null;
+  const adj = new Map<number, number[]>();
+  for (const c of carbonBranch) {
+    adj.set(c, (mol.atoms[c]?.neighbors ?? []).filter((n) => carbonBranch.includes(n)));
+  }
+  const dist = new Map<number, number>([[startAtom, 0]]);
+  const visited = new Set([startAtom]);
+  const queue: number[] = [startAtom];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    for (const n of adj.get(cur) ?? []) {
+      if (visited.has(n)) continue;
+      visited.add(n);
+      dist.set(n, (dist.get(cur) ?? 0) + 1);
+      queue.push(n);
+    }
+  }
+  const d = dist.get(carbonWithHalogen);
+  return d === undefined ? null : d + 1;
 }
 
 function halogenNames(count: number, halogens: string[]): string {
@@ -209,7 +257,7 @@ export function numberChain(
   chainResult: ChainResult,
   steps?: string[]
 ): NumberingResult {
-  const { chain, unsaturationPositions, alcoholPositions, aminePositions } = chainResult;
+  const { chain, unsaturationPositions, alcoholPositions, thiolPositions, aminePositions } = chainResult;
 
   if (chain.length === 0) {
     return { chain, numbering: new Map(), substituents: [] };
@@ -246,6 +294,7 @@ export function numberChain(
 
   const filteredSubs = rawSubstituents.filter((s) => {
     if (hasAlcoholSuffix && s.name === "hidroxi") return false;
+    if (principalGroup?.type === "thiol" && s.name === "sulfanil") return false;
     if (principalGroup?.type === "amine" && s.name === "amino") return false;
     if (principalGroupAtoms.size > 0) {
       for (const a of s.atomIds) {
@@ -263,12 +312,21 @@ export function numberChain(
     .map((id) => chain.indexOf(id))
     .filter((i) => i !== -1);
 
-  const ohForward = ohIndices.map((i) => i + 1);
-  const ohBackward = ohIndices.map((i) => chain.length - i);
-  const minOhForward = ohForward.length > 0 ? Math.min(...ohForward) : Infinity;
-  const minOhBackward = ohBackward.length > 0 ? Math.min(...ohBackward) : Infinity;
+const ohForward = ohIndices.map((i) => i + 1);
+const ohBackward = ohIndices.map((i) => chain.length - i);
+const minOhForward = ohForward.length > 0 ? Math.min(...ohForward) : Infinity;
+const minOhBackward = ohBackward.length > 0 ? Math.min(...ohBackward) : Infinity;
 
-  const amForward = amineIndices.map((i) => i + 1);
+const thiolIndices = thiolPositions
+  .map((id) => chain.indexOf(id))
+  .filter((i) => i !== -1);
+
+const thiolForward = thiolIndices.map((i) => i + 1);
+const thiolBackward = thiolIndices.map((i) => chain.length - i);
+const minThiolForward = thiolForward.length > 0 ? Math.min(...thiolForward) : Infinity;
+const minThiolBackward = thiolBackward.length > 0 ? Math.min(...thiolBackward) : Infinity;
+
+const amForward = amineIndices.map((i) => i + 1);
   const amBackward = amineIndices.map((i) => chain.length - i);
   const minAmForward = amForward.length > 0 ? Math.min(...amForward) : Infinity;
   const minAmBackward = amBackward.length > 0 ? Math.min(...amBackward) : Infinity;
@@ -286,6 +344,10 @@ export function numberChain(
   if (minOhForward < minOhBackward) {
     useForward = true;
   } else if (minOhBackward < minOhForward) {
+    useForward = false;
+  } else if (minThiolForward < minThiolBackward) {
+    useForward = true;
+  } else if (minThiolBackward < minThiolForward) {
     useForward = false;
   } else if (minAmForward < minAmBackward) {
     useForward = true;
@@ -329,6 +391,15 @@ export function numberChain(
         .join(", ");
       steps.push(
         `Numeración: Se numeró de ${fromLabel} a ${toLabel} para asignar el localizador más bajo al grupo alcohol (posición ${ohLocantsJoined}).`
+      );
+    } else if (thiolPositions.length > 0) {
+      const thiolLocantsForStep = useForward ? thiolForward : thiolBackward;
+      const thiolLocantsJoined = thiolLocantsForStep
+        .filter((loc) => loc !== Infinity)
+        .sort((a, b) => a - b)
+        .join(", ");
+      steps.push(
+        `Numeración: Se numeró de ${fromLabel} a ${toLabel} para asignar el localizador más bajo al grupo tiol (posición ${thiolLocantsJoined}).`
       );
     } else if (aminePositions.length > 0) {
       const amLocantsForStep = useForward ? amForward : amBackward;

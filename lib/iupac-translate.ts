@@ -45,6 +45,8 @@ const IUPAC_ROOT_MAP: [RegExp, string][] = [
   [/hydroxy/gi, "hidroxi"],
   [/oxo/gi, "oxo"],
   [/amino/gi, "amino"],
+  [/thiol/gi, "tiol"],
+  [/sulfanyl/gi, "sulfanil"],
   [/chloro/gi, "cloro"],
   [/bromo/gi, "bromo"],
   [/fluoro/gi, "fluoro"],
@@ -108,6 +110,7 @@ const IUPAC_WORD_MAP: [RegExp, string][] = [
   [/^amine$/i, "amina"],
   [/^amide$/i, "amida"],
   [/^nitrile$/i, "nitrilo"],
+  [/^thiol$/i, "tiol"],
   [/^ester$/i, "éster"],
   [/^ether$/i, "éter"],
 ];
