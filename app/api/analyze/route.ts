@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchCompoundBySmiles, PubChemUnavailableError } from "@/lib/pubchem";
 import { computeLocalAnalysis } from "@/lib/local-chemistry";
+import { nameMolecule } from "@/lib/iupac-naming";
+
+function detectGroups(smiles: string) {
+  return nameMolecule(smiles).functionalGroupsDetected ?? [];
+}
 
 export async function GET(request: NextRequest) {
   const smiles = request.nextUrl.searchParams.get("smiles");
@@ -18,7 +23,10 @@ export async function GET(request: NextRequest) {
     const result = await searchCompoundBySmiles(trimmedSmiles);
 
     if (result) {
-      return NextResponse.json(result);
+      return NextResponse.json({
+        ...result,
+        functionalGroupsDetected: detectGroups(result.canonicalSMILES || trimmedSmiles),
+      });
     }
 
     return NextResponse.json({
@@ -28,6 +36,7 @@ export async function GET(request: NextRequest) {
       molecularWeight: null,
       canonicalSMILES: trimmedSmiles,
       source: "not_in_pubchem",
+      functionalGroupsDetected: detectGroups(trimmedSmiles),
     });
   } catch (err) {
     if (err instanceof PubChemUnavailableError) {
@@ -40,6 +49,7 @@ export async function GET(request: NextRequest) {
         molecularWeight: localData?.molecularWeight ?? null,
         canonicalSMILES: trimmedSmiles,
         source: "local",
+        functionalGroupsDetected: detectGroups(trimmedSmiles),
       });
     }
     console.error("Analyze error:", err);

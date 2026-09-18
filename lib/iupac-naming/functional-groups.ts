@@ -19,6 +19,30 @@ export interface DetectedGroup {
   priority: number;
 }
 
+export type DisplayGroupType = FunctionalGroupType | "nitro" | "ether";
+
+export interface FunctionalGroupInfo {
+  type: DisplayGroupType;
+  nameEs: string;
+  isPrincipal: boolean;
+  priority?: number;
+}
+
+export const GROUP_DISPLAY_NAMES_ES: Record<DisplayGroupType, string> = {
+  carboxylic_acid: "Ácido carboxílico",
+  ester: "Éster",
+  amide: "Amida",
+  nitrile: "Nitrilo",
+  aldehyde: "Aldehído",
+  ketone: "Cetona",
+  alcohol: "Alcohol",
+  thiol: "Tiol",
+  amine: "Amina",
+  nitro: "Nitro",
+  ether: "Éter",
+  none: "Sin grupo",
+};
+
 export const GROUP_LABELS_ES: Record<FunctionalGroupType, string> = {
   carboxylic_acid: "ácido carboxílico (-COOH)",
   ester: "éster (-COOR)",
@@ -283,6 +307,68 @@ export function detectAllFunctionalGroups(mol: Molecule): DetectedGroup[] {
 export function getPrincipalGroup(mol: Molecule): DetectedGroup | null {
   const groups = detectAllFunctionalGroups(mol);
   return groups.length > 0 ? groups[0] : null;
+}
+
+function findNitroGroups(mol: Molecule): FunctionalGroupInfo[] {
+  const results: FunctionalGroupInfo[] = [];
+  for (let i = 0; i < mol.atoms.length; i++) {
+    if (mol.atoms[i]?.element !== "N") continue;
+    if (!isNitroGroup(mol, i)) continue;
+    results.push({ type: "nitro", nameEs: GROUP_DISPLAY_NAMES_ES.nitro, isPrincipal: false });
+  }
+  return results;
+}
+
+function findEthers(mol: Molecule): FunctionalGroupInfo[] {
+  const results: FunctionalGroupInfo[] = [];
+  for (let i = 0; i < mol.atoms.length; i++) {
+    if (mol.atoms[i]?.element !== "O") continue;
+    const carbonNeighbors = (mol.atoms[i]?.neighbors ?? []).filter(
+      (n) => mol.atoms[n]?.element === "C"
+    );
+    if (carbonNeighbors.length !== 2) continue;
+    const isEsterOrAcidOxygen = carbonNeighbors.some((c) =>
+      (mol.atoms[c]?.neighbors ?? []).some(
+        (n) => mol.atoms[n]?.element === "O" && getBondOrder(mol, c, n) === 2
+      )
+    );
+    if (isEsterOrAcidOxygen) continue;
+    results.push({ type: "ether", nameEs: GROUP_DISPLAY_NAMES_ES.ether, isPrincipal: false });
+  }
+  return results;
+}
+
+/**
+ * Lista de grupos funcionales para mostrar en la UI, reutilizando la
+ * detección estructural del motor. Marca como principal el grupo de mayor
+ * prioridad (o todos los del mismo tipo, p. ej. el -diol) y como
+ * sustituyentes el resto, incluyendo nitro y éteres (que nunca son
+ * principales). Un hidrocarburo sin heteroátomos devuelve [].
+ */
+export function detectFunctionalGroupsForDisplay(mol: Molecule): FunctionalGroupInfo[] {
+  const namingGroups = detectAllFunctionalGroups(mol);
+  const principalType = namingGroups[0]?.type;
+  const seen = new Set<DisplayGroupType>();
+  const result: FunctionalGroupInfo[] = [];
+
+  for (const group of namingGroups) {
+    if (seen.has(group.type)) continue;
+    seen.add(group.type);
+    result.push({
+      type: group.type,
+      nameEs: GROUP_DISPLAY_NAMES_ES[group.type],
+      isPrincipal: group.type === principalType,
+      priority: group.priority,
+    });
+  }
+
+  for (const group of [...findNitroGroups(mol), ...findEthers(mol)]) {
+    if (seen.has(group.type)) continue;
+    seen.add(group.type);
+    result.push(group);
+  }
+
+  return result;
 }
 
 export function isOnChain(group: DetectedGroup, chain: number[]): boolean {

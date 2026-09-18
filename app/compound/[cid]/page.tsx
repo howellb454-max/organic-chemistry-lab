@@ -5,6 +5,7 @@ import { Header } from "../../components/header";
 import { getCompoundByCid, getCompoundImageUrl, PubChemUnavailableError } from "@/lib/pubchem";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { CompoundStructure } from "./compound-structure";
 import { translateIupacToEs } from "@/lib/iupac-translate";
 import { getCommonNameEs } from "@/lib/common-names-es";
@@ -12,49 +13,6 @@ import { nameMolecule } from "@/lib/iupac-naming";
 
 interface Props {
   params: Promise<{ cid: string }>;
-}
-
-interface FunctionalGroup {
-  name: string;
-  formula: string;
-}
-
-const GROUP_KEYWORDS: Record<string, FunctionalGroup> = {
-  "alcohol": { name: "Grupo Alcohol", formula: "-OH" },
-  "metil": { name: "Metilo", formula: "-CH₃" },
-  "etil": { name: "Etilo", formula: "-C₂H₅" },
-  "cloro": { name: "Cloro", formula: "-Cl" },
-  "bromo": { name: "Bromo", formula: "-Br" },
-  "fluoro": { name: "Fluoro", formula: "-F" },
-  "yodo": { name: "Yodo", formula: "-I" },
-  "enlace doble": { name: "Enlace Doble", formula: "C=C" },
-  "enlace triple": { name: "Enlace Triple", formula: "C≡C" },
-};
-
-function detectFunctionalGroups(steps: string[]): FunctionalGroup[] {
-  const allText = steps.join(" ").toLowerCase();
-  const detected: FunctionalGroup[] = [];
-  const seen = new Set<string>();
-
-  const wordPatterns: Array<{ pattern: RegExp; group: FunctionalGroup }> = [
-    { pattern: /\balcohol\b/, group: GROUP_KEYWORDS["alcohol"] },
-    { pattern: /\bmetil\b/, group: GROUP_KEYWORDS["metil"] },
-    { pattern: /\betil\b/, group: GROUP_KEYWORDS["etil"] },
-    { pattern: /\bcloro\b/, group: GROUP_KEYWORDS["cloro"] },
-    { pattern: /\bbromo\b/, group: GROUP_KEYWORDS["bromo"] },
-    { pattern: /\bfluoro\b/, group: GROUP_KEYWORDS["fluoro"] },
-    { pattern: /\byodo\b/, group: GROUP_KEYWORDS["yodo"] },
-    { pattern: /enlace doble/, group: GROUP_KEYWORDS["enlace doble"] },
-    { pattern: /enlace triple/, group: GROUP_KEYWORDS["enlace triple"] },
-  ];
-
-  for (const { pattern, group } of wordPatterns) {
-    if (pattern.test(allText) && !seen.has(group.name)) {
-      detected.push(group);
-      seen.add(group.name);
-    }
-  }
-  return detected;
 }
 
 function classifyCompound(name: string | null, steps: string[]): string {
@@ -127,7 +85,7 @@ export default async function CompoundPage({ params }: Props) {
     ? nameMolecule(compound.canonicalSMILES)
     : null;
 
-  const functionalGroups = detectFunctionalGroups(naming?.steps ?? []);
+  const functionalGroups = naming?.functionalGroupsDetected ?? [];
   const compoundType = classifyCompound(naming?.name ?? null, naming?.steps ?? []);
   const educationalSummary = buildEducationalSummary(naming?.name ?? null, naming?.steps ?? []);
 
@@ -330,19 +288,23 @@ export default async function CompoundPage({ params }: Props) {
               </CardHeader>
               <CardContent>
                 {functionalGroups.length > 0 ? (
-                  <ul className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
                     {functionalGroups.map((g) => (
-                      <li key={g.name} className="flex items-center justify-between rounded-lg bg-emerald-500/5 px-3 py-2">
-                        <span className="text-xs font-medium">{g.name}</span>
-                        <span className="font-mono text-xs text-emerald-500">{g.formula}</span>
-                      </li>
+                      <Badge
+                        key={g.type}
+                        variant={g.isPrincipal ? "default" : "secondary"}
+                        className={g.isPrincipal ? "bg-emerald-500 text-white" : undefined}
+                      >
+                        {g.nameEs}
+                        {g.isPrincipal && (
+                          <span className="text-[10px] font-normal opacity-80">principal</span>
+                        )}
+                      </Badge>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    {naming?.name
-                      ? "No se detectaron grupos funcionales específicos."
-                      : "No disponible sin estructura molecular."}
+                    Hidrocarburo (sin grupos funcionales prioritarios)
                   </p>
                 )}
               </CardContent>

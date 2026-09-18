@@ -4,9 +4,11 @@ import { numberChain } from "./number-chain";
 import { buildName } from "./build-name";
 import {
   detectAllFunctionalGroups,
+  detectFunctionalGroupsForDisplay,
   GROUP_LABELS_ES,
   isThiolSulfur,
   type FunctionalGroupType,
+  type FunctionalGroupInfo,
   type DetectedGroup,
 } from "./functional-groups";
 import { isNitroGroup } from "./nitro-group";
@@ -16,6 +18,7 @@ export interface NamingResult {
   name: string | null;
   error: string | null;
   steps: string[];
+  functionalGroupsDetected?: FunctionalGroupInfo[];
 }
 
 function hasRingClosures(mol: Molecule): boolean {
@@ -240,6 +243,7 @@ export function nameMolecule(smiles: string): NamingResult {
     }
 
     const allGroups = detectAllFunctionalGroups(mol);
+    const functionalGroupsDetected = detectFunctionalGroupsForDisplay(mol);
 
     const aromaticCycle = isAromatic(mol);
     const aromaticParent: string | null = aromaticCycle ? "benceno" : null;
@@ -262,7 +266,7 @@ export function nameMolecule(smiles: string): NamingResult {
       if (retained) {
         steps.push(retained.explanation);
         steps.push(`Nombre final: ${retained.name}.`);
-        return { name: retained.name, error: null, steps };
+        return { name: retained.name, error: null, steps, functionalGroupsDetected };
       }
     }
 
@@ -272,14 +276,14 @@ export function nameMolecule(smiles: string): NamingResult {
       aromaticCycle ? [...aromaticCycle] : undefined
     );
     if (!mainChain || mainChain.chain.length < 1) {
-      return { name: null, error: "No se pudo determinar la cadena principal.", steps };
+      return { name: null, error: "No se pudo determinar la cadena principal.", steps, functionalGroupsDetected };
     }
 
     const numberingResult = numberChain(mol, mainChain, steps);
     const name = buildName(mol, numberingResult, mainChain, steps, isCyclic, aromaticParent);
 
     if (!name) {
-      return { name: null, error: "No se pudo generar el nombre IUPAC.", steps };
+      return { name: null, error: "No se pudo generar el nombre IUPAC.", steps, functionalGroupsDetected };
     }
 
     const topGroup = allGroups[0] ?? null;
@@ -289,10 +293,10 @@ export function nameMolecule(smiles: string): NamingResult {
       topGroup,
     });
     if (consistencyError) {
-      return { name: null, error: consistencyError, steps };
+      return { name: null, error: consistencyError, steps, functionalGroupsDetected };
     }
 
-    return { name, error: null, steps };
+    return { name, error: null, steps, functionalGroupsDetected };
   } catch (err) {
     console.error("IUPAC naming error:", err);
     return { name: null, error: "Error al procesar la estructura molecular.", steps };
