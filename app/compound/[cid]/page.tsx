@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil, Globe, ListOrdered, CheckCircle2, AlertTriangle, Atom, BookOpen, Beaker } from "lucide-react";
+import { ArrowLeft, FlaskConical, Hash, Weight, Binary, Key, Tag, Pencil, Globe, ListOrdered, CheckCircle2, AlertTriangle, Atom, BookOpen, Beaker, Droplets, FlaskRound } from "lucide-react";
 import { Header } from "../../components/header";
-import { getCompoundByCid, getCompoundImageUrl } from "@/lib/pubchem";
+import { getCompoundByCid, getCompoundImageUrl, PubChemUnavailableError } from "@/lib/pubchem";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { CompoundStructure } from "./compound-structure";
@@ -102,15 +102,28 @@ export default async function CompoundPage({ params }: Props) {
     notFound();
   }
 
-  const compound = await getCompoundByCid(cid);
-  if (!compound) notFound();
+  let compound = null;
+  let pubChemUnavailable = false;
+  try {
+    compound = await getCompoundByCid(cid);
+  } catch (err) {
+    if (err instanceof PubChemUnavailableError) {
+      pubChemUnavailable = true;
+    } else {
+      throw err;
+    }
+  }
+
+  if (!compound && !pubChemUnavailable) {
+    notFound();
+  }
 
   const imageUrl = getCompoundImageUrl(cid);
-  const builderUrl = compound.canonicalSMILES
+  const builderUrl = compound?.canonicalSMILES
     ? `/builder?smiles=${encodeURIComponent(compound.canonicalSMILES)}`
     : "/builder";
 
-  const naming = compound.canonicalSMILES
+  const naming = compound?.canonicalSMILES
     ? nameMolecule(compound.canonicalSMILES)
     : null;
 
@@ -118,14 +131,51 @@ export default async function CompoundPage({ params }: Props) {
   const compoundType = classifyCompound(naming?.name ?? null, naming?.steps ?? []);
   const educationalSummary = buildEducationalSummary(naming?.name ?? null, naming?.steps ?? []);
 
-  const mainProps = [
-    { icon: Hash, label: "CID", value: String(cid) },
-    { icon: FlaskConical, label: "Fórmula Molecular", value: compound.molecularFormula },
-    { icon: Weight, label: "Masa Molar", value: compound.molecularWeight ? `${compound.molecularWeight} g/mol` : null },
-    { icon: Binary, label: "SMILES", value: compound.canonicalSMILES },
-    { icon: Key, label: "InChI", value: compound.inchi },
-    { icon: Tag, label: "InChIKey", value: compound.inchikey },
-  ].filter((p) => p.value);
+  const mainProps = compound
+    ? [
+        { icon: Hash, label: "CID", value: String(cid) },
+        { icon: FlaskConical, label: "Fórmula Molecular", value: compound.molecularFormula },
+        { icon: Weight, label: "Masa Molar", value: compound.molecularWeight ? `${compound.molecularWeight} g/mol` : null },
+        { icon: Binary, label: "SMILES", value: compound.canonicalSMILES },
+        { icon: Key, label: "InChI", value: compound.inchi },
+        { icon: Tag, label: "InChIKey", value: compound.inchikey },
+      ].filter((p) => p.value)
+    : [];
+
+  if (pubChemUnavailable) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <Header />
+        <main className="flex-1">
+          <div className="mx-auto max-w-4xl px-4 pt-6 pb-20 sm:px-6">
+            <Link
+              href="/search"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              <ArrowLeft className="mr-1 size-4" />
+              Volver a búsqueda
+            </Link>
+
+            <Card className="mt-8 border-amber-500/30 bg-amber-500/5">
+              <CardContent className="flex items-center gap-3 p-6">
+                <AlertTriangle className="size-5 shrink-0 text-amber-500" />
+                <div>
+                  <p className="font-medium">PubChem no disponible temporalmente</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    El servicio PubChem está saturado o no responde (límite de peticiones).
+                    Intenta de nuevo en unos segundos.
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">CID: {cid}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!compound) notFound();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -343,18 +393,74 @@ export default async function CompoundPage({ params }: Props) {
                 <CardTitle className="text-sm">Reacciones Relacionadas</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-muted-foreground">Reacciones químicas en las que participa este compuesto.</p>
+                <p className="text-xs text-muted-foreground">
+                  PubChem no dispone de un endpoint REST simple para listar reacciones
+                  asociadas a un compuesto individual. Los datos de reactividad se
+                  encuentran en BioAssay/Patents, que requieren análisis adicional.
+                </p>
                 <p className="mt-2 text-xs font-medium text-emerald-500 dark:text-emerald-400">Próximamente</p>
               </CardContent>
             </Card>
 
-            <Card className="rounded-xl border-dashed opacity-60">
+            <Card className="rounded-xl border-emerald-500/30 bg-emerald-500/5">
               <CardHeader>
-                <CardTitle className="text-sm">Propiedades</CardTitle>
+                <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <FlaskRound className="size-4 text-emerald-500" />
+                </div>
+                <CardTitle className="text-sm">Propiedades Fisicoquímicas</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-muted-foreground">Punto de fusión, ebullición, solubilidad y otras propiedades fisicoquímicas.</p>
-                <p className="mt-2 text-xs font-medium text-emerald-500 dark:text-emerald-400">Próximamente</p>
+                {(() => {
+                  const computed: Array<{ label: string; value: string | number | null; unit?: string }> = [
+                    { label: "LogP (XLogP3)", value: compound.xlogp },
+                    { label: "TPSA", value: compound.tpsa, unit: "Å²" },
+                    { label: "Donadores de H", value: compound.hbondDonors },
+                    { label: "Aceptores de H", value: compound.hbondAcceptors },
+                    { label: "Complejidad", value: compound.complexity },
+                  ].filter((p) => p.value !== null && p.value !== undefined);
+
+                  const hasExperimental = compound.experimental.length > 0;
+
+                  if (computed.length === 0 && !hasExperimental) {
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        No hay datos fisicoquímicos disponibles en PubChem para este compuesto.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {hasExperimental && (
+                        <div className="space-y-1.5 mb-4">
+                          {compound.experimental.map((prop) => (
+                            <div
+                              key={prop.heading}
+                              className="flex items-center justify-between rounded-lg bg-emerald-500/5 px-3 py-2"
+                            >
+                              <span className="text-xs font-medium">{prop.heading}</span>
+                              <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                                {prop.value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {computed.length > 0 && (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {computed.map((prop) => (
+                            <div key={prop.label} className="rounded-lg bg-emerald-500/5 px-2.5 py-2 text-center">
+                              <p className="text-[10px] font-medium text-muted-foreground">{prop.label}</p>
+                              <p className="font-mono text-xs font-semibold">
+                                {prop.value}{prop.unit ? ` ${prop.unit}` : ""}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>

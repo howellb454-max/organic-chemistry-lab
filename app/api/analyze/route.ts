@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchCompoundBySmiles } from "@/lib/pubchem";
+import { searchCompoundBySmiles, PubChemUnavailableError } from "@/lib/pubchem";
+import { computeLocalAnalysis } from "@/lib/local-chemistry";
 
 export async function GET(request: NextRequest) {
   const smiles = request.nextUrl.searchParams.get("smiles");
@@ -11,8 +12,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const trimmedSmiles = smiles.trim();
+
   try {
-    const result = await searchCompoundBySmiles(smiles.trim());
+    const result = await searchCompoundBySmiles(trimmedSmiles);
 
     if (result) {
       return NextResponse.json(result);
@@ -23,10 +26,22 @@ export async function GET(request: NextRequest) {
       name: null,
       molecularFormula: null,
       molecularWeight: null,
-      canonicalSMILES: smiles.trim(),
+      canonicalSMILES: trimmedSmiles,
       source: "not_in_pubchem",
     });
   } catch (err) {
+    if (err instanceof PubChemUnavailableError) {
+      console.warn("PubChem unavailable during analyze, using local fallback:", err.message);
+      const localData = computeLocalAnalysis(trimmedSmiles);
+      return NextResponse.json({
+        cid: null,
+        name: null,
+        molecularFormula: localData?.molecularFormula ?? null,
+        molecularWeight: localData?.molecularWeight ?? null,
+        canonicalSMILES: trimmedSmiles,
+        source: "local",
+      });
+    }
     console.error("Analyze error:", err);
     return NextResponse.json(
       { error: "Error al consultar PubChem. Intenta de nuevo." },

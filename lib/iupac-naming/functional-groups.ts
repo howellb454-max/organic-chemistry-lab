@@ -17,6 +17,18 @@ export interface DetectedGroup {
   priority: number;
 }
 
+export const GROUP_LABELS_ES: Record<FunctionalGroupType, string> = {
+  carboxylic_acid: "ácido carboxílico (-COOH)",
+  ester: "éster (-COOR)",
+  amide: "amida (-CONH₂)",
+  nitrile: "nitrilo (-CN)",
+  aldehyde: "aldehído (-CHO)",
+  ketone: "cetona (C=O)",
+  alcohol: "alcohol (-OH)",
+  amine: "amina (-NH₂)",
+  none: "",
+};
+
 export const GROUP_PRIORITY: Record<FunctionalGroupType, number> = {
   carboxylic_acid: 8,
   ester: 7,

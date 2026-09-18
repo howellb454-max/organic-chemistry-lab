@@ -2,6 +2,8 @@ import { parseSmiles, hasUnsupportedElements, type Molecule } from "./smiles-par
 import { findMainChain } from "./find-main-chain";
 import { numberChain } from "./number-chain";
 import { buildName } from "./build-name";
+import { detectAllFunctionalGroups, GROUP_LABELS_ES, type FunctionalGroupType, type DetectedGroup } from "./functional-groups";
+import { tryRetainedAromaticName } from "./aromatic-names";
 
 export interface NamingResult {
   name: string | null;
@@ -99,6 +101,81 @@ const ELEMENT_NAMES_ES: Record<string, string> = {
   Ca: "calcio", B: "boro",
 };
 
+const SUFFIX_MARKERS: Record<FunctionalGroupType, RegExp> = {
+  carboxylic_acid: /(oico|fórmico)/,
+  ester: /oato/,
+  amide: /amida/,
+  nitrile: /nitrilo/,
+  aldehyde: /(anal|aldehído)/,
+  ketone: /ona/,
+  alcohol: /ol$/,
+  amine: /amina/,
+  none: /./,
+};
+
+function validateNamingConsistency(
+  mol: Molecule,
+  name: string,
+  ctx: {
+    aromaticRing: Set<number> | null;
+    mainChain: number[];
+    topGroup: DetectedGroup | null;
+  }
+): string | null {
+  const { aromaticRing, mainChain, topGroup } = ctx;
+
+  const hasAromaticFlags = mol.atoms.some((a) => a.aromatic);
+  if (hasAromaticFlags && !aromaticRing) {
+    return "Esta estructura contiene un sistema aromático (anillos fusionados o heterociclos) que el nomenclador aún no sabe nombrar con certeza.";
+  }
+
+  const chainSet = new Set(mainChain);
+  const ringSet = aromaticRing ?? new Set<number>();
+
+  if (topGroup && topGroup.type !== "none" && !chainSet.has(topGroup.carbonId)) {
+    const label = GROUP_LABELS_ES[topGroup.type];
+    return `Esta estructura incluye elementos que aún no sabemos nombrar automáticamente: el grupo ${label} no queda sobre la cadena principal (combinación con anillo aromático u otras ramificaciones).`;
+  }
+
+  for (const bond of mol.bonds) {
+    if (bond.order === 1) continue;
+    const fromEl = mol.atoms[bond.from]?.element;
+    const toEl = mol.atoms[bond.to]?.element;
+    if (fromEl !== "C" || toEl !== "C") continue;
+    const inChainOrRing =
+      chainSet.has(bond.from) || chainSet.has(bond.to) || ringSet.has(bond.from) || ringSet.has(bond.to);
+    if (!inChainOrRing) {
+      return "Esta estructura incluye enlaces dobles o triples dentro de un sustituyente que aún no sabemos nombrar automáticamente.";
+    }
+  }
+
+  if (topGroup && topGroup.type !== "none") {
+    const marker = SUFFIX_MARKERS[topGroup.type];
+    if (!marker.test(name)) {
+      return "Esta estructura incluye elementos que aún no sabemos nombrar automáticamente (el nombre generado no reflejaría su grupo funcional principal).";
+    }
+
+    if (topGroup.type !== "alcohol") {
+      let unsatOnChain = 0;
+      for (let i = 0; i < mainChain.length - 1; i++) {
+        for (const b of mol.bonds) {
+          const a = mainChain[i]!;
+          const n = mainChain[i + 1]!;
+          if ((b.from === a && b.to === n) || (b.from === n && b.to === a)) {
+            if (b.order === 2 || b.order === 3) unsatOnChain++;
+            break;
+          }
+        }
+      }
+      if (unsatOnChain > 0 && !/(en|in)/.test(name)) {
+        return "Esta estructura combina un grupo funcional con insaturaciones en la cadena que aún no sabemos nombrar con certeza.";
+      }
+    }
+  }
+
+  return null;
+}
+
 export function nameMolecule(smiles: string): NamingResult {
   const steps: string[] = [];
 
@@ -124,10 +201,31 @@ export function nameMolecule(smiles: string): NamingResult {
       steps.push("Estructura: Se detectó un ciclo en la molécula, se añadirá el prefijo 'ciclo-' al nombre del padre.");
     }
 
+    const allGroups = detectAllFunctionalGroups(mol);
+
     const aromaticCycle = isAromatic(mol);
     const aromaticParent: string | null = aromaticCycle ? "benceno" : null;
     if (aromaticParent) {
       steps.push("Estructura: Se identificó un anillo aromático de benceno como núcleo principal.");
+    }
+
+    const hasAromaticFlags = mol.atoms.some((a) => a.aromatic);
+    if (hasAromaticFlags && !aromaticCycle) {
+      return {
+        name: null,
+        error:
+          "Esta estructura contiene un sistema aromático (anillos fusionados o heterociclos) que el nomenclador aún no sabe nombrar con certeza.",
+        steps,
+      };
+    }
+
+    if (aromaticCycle) {
+      const retained = tryRetainedAromaticName(mol, [...aromaticCycle]);
+      if (retained) {
+        steps.push(retained.explanation);
+        steps.push(`Nombre final: ${retained.name}.`);
+        return { name: retained.name, error: null, steps };
+      }
     }
 
     const mainChain = findMainChain(
@@ -144,6 +242,16 @@ export function nameMolecule(smiles: string): NamingResult {
 
     if (!name) {
       return { name: null, error: "No se pudo generar el nombre IUPAC.", steps };
+    }
+
+    const topGroup = allGroups[0] ?? null;
+    const consistencyError = validateNamingConsistency(mol, name, {
+      aromaticRing: aromaticCycle,
+      mainChain: mainChain.chain,
+      topGroup,
+    });
+    if (consistencyError) {
+      return { name: null, error: consistencyError, steps };
     }
 
     return { name, error: null, steps };

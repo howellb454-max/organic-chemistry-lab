@@ -217,9 +217,9 @@ export function buildName(
     const tail = simpleMolecule ? `an${SUFFIX_MAP.amine}` : `an-${formatSuffix(amineLocants, SUFFIX_MAP.amine)}`;
     fullName = concatSegments(subPrefix, cyclicPrefix, parentName, tail);
   } else if (pgType === "amide") {
-    fullName = concatSegments(subPrefix, cyclicPrefix, parentName, "amida");
+    fullName = concatSegments(subPrefix, cyclicPrefix, parentName, "anamida");
   } else if (pgType === "nitrile") {
-    fullName = concatSegments(subPrefix, cyclicPrefix, parentName, "nitrilo");
+    fullName = concatSegments(subPrefix, cyclicPrefix, parentName, "anonitrilo");
   } else if (pgType === "ester") {
     const alkyl = principalGroup ? getEsterAlkylName(mol, principalGroup.carbonId) : "metilo";
     fullName = concatSegments(subPrefix, cyclicPrefix, parentName, `anoato de ${alkyl}`);

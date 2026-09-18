@@ -34,7 +34,7 @@ interface AnalyzeResult {
   molecularFormula: string | null;
   molecularWeight: string | null;
   canonicalSMILES: string;
-  source?: string;
+  source?: "not_in_pubchem" | "local" | string;
 }
 
 function BuilderContent() {
@@ -217,6 +217,16 @@ function BuilderContent() {
                     <span>
                       Este compuesto no está en la base de datos de PubChem,
                       pero aquí está su SMILES.
+                    </span>
+                  </div>
+                )}
+
+                {result.source === "local" && (
+                  <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="size-4 shrink-0" />
+                    <span>
+                      PubChem no está disponible. Fórmula y masa molar calculadas
+                      localmente, no verificadas contra PubChem.
                     </span>
                   </div>
                 )}

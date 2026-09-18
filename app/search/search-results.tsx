@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { Atom, FlaskConical, ArrowRight, AlertTriangle } from "lucide-react";
+import { Atom, FlaskConical, ArrowRight, AlertTriangle, Weight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CompoundResult, getCompoundImageUrl } from "@/lib/pubchem";
 
@@ -110,7 +110,8 @@ export function SearchResults() {
       );
     }
 
-    // OPSIN-only result (no CID) — show inline
+    // OPSIN-only or local-computed result (no CID) — show inline
+    const isLocal = result.source === "local";
     return (
       <Card>
         <CardContent className="p-4 space-y-4">
@@ -120,20 +121,47 @@ export function SearchResults() {
             </div>
             <div>
               <h3 className="text-base font-semibold">{result.name}</h3>
-              <p className="text-xs text-muted-foreground">Sin datos en PubChem</p>
+              <p className="text-xs text-muted-foreground">
+                {isLocal ? "Datos calculados localmente" : "Sin datos en PubChem"}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400">
             <AlertTriangle className="size-4 shrink-0" />
             <span>
-              Nombre resuelto por OPSIN. PubChem no tiene este compuesto, por lo que no hay datos de fórmula, masa ni imagen 2D disponibles.
+              {isLocal
+                ? "PubChem no está disponible. Los datos mostrados (fórmula, masa molar) son calculados localmente y no han sido verificados contra PubChem."
+                : "Nombre resuelto por OPSIN. PubChem no tiene este compuesto, por lo que no hay datos de fórmula, masa ni imagen 2D disponibles."}
             </span>
           </div>
 
+          {(result.molecularFormula || result.molecularWeight) && (
+            <dl className="grid gap-2 sm:grid-cols-2">
+              {result.molecularFormula && (
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <FlaskConical className="size-3" />
+                    Fórmula Molecular
+                  </dt>
+                  <dd className="font-mono text-sm">{result.molecularFormula}</dd>
+                </div>
+              )}
+              {result.molecularWeight && (
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Weight className="size-3" />
+                    Masa Molar
+                  </dt>
+                  <dd className="font-mono text-sm">{result.molecularWeight} g/mol</dd>
+                </div>
+              )}
+            </dl>
+          )}
+
           <div className="rounded-lg bg-muted/50 p-3">
             <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              SMILES (OPSIN)
+              SMILES
             </dt>
             <dd className="font-mono text-sm break-all">{result.canonicalSMILES}</dd>
           </div>
